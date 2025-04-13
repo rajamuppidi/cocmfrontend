@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
-import AdminDashboard from '@/components/AdminDashboard';
+import Settings from '@/components/Settings';
 import Users from '@/components/Users';
 import Clinics from '@/components/Clinics';
 
@@ -26,7 +26,7 @@ export default function AdminPage() {
       case 'users':
         return <Users />;
       case 'settings':
-        return <AdminDashboard />;
+        return <Settings />;
       case 'clinics':
       default:
         return <Clinics />;

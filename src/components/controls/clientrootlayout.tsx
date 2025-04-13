@@ -12,6 +12,7 @@ import { setClinic, initializeClinic } from '@/lib/clinicSlice';
 import { RootState, AppDispatch } from '@/lib/store';
 import { UserContext } from '@/context/UserContext';
 import AdminDashboard from '@/components/AdminDashboard';
+import Settings from '@/components/Settings';
 
 interface ClientRootLayoutProps {
   children: ReactNode;
@@ -134,7 +135,7 @@ const ClientRootLayout = ({ children }: ClientRootLayoutProps) => {
         
         if (activeTab === 'clinics') return <Clinics />;
         if (activeTab === 'users') return <Users />;
-        if (activeTab === 'settings') return <AdminDashboard />;
+        if (activeTab === 'settings') return <Settings />;
         return <Clinics />; // Default tab for admin
       }
     } else if (user?.role === 'Psychiatric Consultant') {
