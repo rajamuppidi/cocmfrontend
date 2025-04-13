@@ -11,7 +11,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { setClinic, initializeClinic } from '@/lib/clinicSlice';
 import { RootState, AppDispatch } from '@/lib/store';
 import { UserContext } from '@/context/UserContext';
-
+import AdminDashboard from '@/components/AdminDashboard';
 
 interface ClientRootLayoutProps {
   children: ReactNode;
@@ -28,6 +28,8 @@ interface User {
 const Clinics = dynamic(() => import('@/components/Clinics'));
 const Users = dynamic(() => import('@/components/Users'));
 const Dashboard = dynamic(() => import('@/components/dashboard'));
+const PsychDashboard = dynamic(() => import('@/components/psych-dashboard'));
+const PsychPatients = dynamic(() => import('@/components/psych-patients'));
 
 const ClientRootLayout = ({ children }: ClientRootLayoutProps) => {
   const router = useRouter();
@@ -69,14 +71,16 @@ const ClientRootLayout = ({ children }: ClientRootLayoutProps) => {
             // Handle redirects based on user role
             if (data.role === 'Admin' && pathname !== '/admin') {
               router.push('/admin');
-            } else if (
-              data.role !== 'Admin' &&
-              pathname !== '/dashboard' &&
-              pathname !== '/active-patients' &&
-              pathname !== '/enrolled-patients'&&
-              !pathname.startsWith('/patients')
-            ) {
-              router.push('/dashboard');
+            } else if (data.role === 'Psychiatric Consultant') {
+              const allowedPsychPaths = ['/psych-dashboard', '/psych-patients', '/patients'];
+              if (!allowedPsychPaths.some(path => pathname.startsWith(path))) {
+                router.push('/psych-dashboard');
+              }
+            } else if (data.role !== 'Admin' && data.role !== 'Psychiatric Consultant') {
+              const allowedPaths = ['/dashboard', '/active-patients', '/enrolled-patients', '/patients'];
+              if (!allowedPaths.some(path => pathname.startsWith(path))) {
+                router.push('/dashboard');
+              }
             }
 
             // Handle clinic selection
@@ -114,29 +118,29 @@ const ClientRootLayout = ({ children }: ClientRootLayoutProps) => {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   }
 
-  const renderContent = () => {
+  const getActiveComponent = () => {
+    const tab = (pathname.includes('?') ? pathname.split('?')[1]?.split('=')[1] : null) || 'dashboard';
+    
     if (user?.role === 'Admin') {
-      switch (activeTab) {
-        case 'clinics':
-          return <Clinics />;
-        case 'users':
-          return <Users />;
-        default:
-          return <div>Settings Content</div>;
+      if (pathname === '/admin') {
+        if (tab === 'clinics') return <Clinics />;
+        if (tab === 'users') return <Users />;
+        if (tab === 'settings') return <AdminDashboard />;
+        return <Clinics />; // Default tab for admin
+      }
+    } else if (user?.role === 'Psychiatric Consultant') {
+      if (pathname === '/psych-dashboard') {
+        return <PsychDashboard />;
+      } else if (pathname === '/psych-patients') {
+        return <PsychPatients />;
       }
     } else {
-      console.log('Current pathname:', pathname);
-      if (pathname === '/active-patients') {
-        return <ActivePatientsPage />;
-      }  else if (pathname === '/enrolled-patients') {
-        console.log('Rendering EnrolledPatientsPage');
-        return <EnrolledPatientsPage />;
-      }else if (pathname.startsWith('/patients')) {
-        return children; // Render the patient dashboard
-      } else {
-        return <Dashboard user={user} />;
+      if (pathname === '/dashboard') {
+        return <Dashboard />;
       }
     }
+    
+    return children;
   };
 
   // Render Authenticated Layout with user passed in props, check if path requires authentication
@@ -144,7 +148,7 @@ const ClientRootLayout = ({ children }: ClientRootLayoutProps) => {
     <UserContext.Provider value={user}>
       {pathname !== '/' ? (
         <AuthenticatedLayout>
-          {renderContent()}
+          {getActiveComponent()}
         </AuthenticatedLayout>
       ) : (
         <div className="min-h-screen flex items-center justify-center">{children}</div>

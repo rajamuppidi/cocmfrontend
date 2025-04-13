@@ -339,27 +339,43 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
   console.log("logged-in user:", user);
   console.log("Patient providers:", patientData.providers);
 
-  const validRoles = ["Admin", "BHCM"];
+  const validRoles = ["Admin", "BHCM", "Psychiatric Consultant"];
   if (!user || !validRoles.includes(user.role)) {
     return (
       <p className="text-red-500">
-        Access Denied: You must be logged in as an Admin or BHCM to view this dashboard.
+        Access Denied: You must be logged in as an Admin, BHCM, or Psychiatric Consultant to view this dashboard.
       </p>
     );
+  }
+
+  if (user.role === "Psychiatric Consultant") {
+    const isPsychiatricConsultantAssigned = patientData.providers.some(
+      p => p.providerType === "Psychiatric Consultant" && p.id === user.id
+    );
+    
+    if (!isPsychiatricConsultantAssigned) {
+      return (
+        <p className="text-red-500">
+          Access Denied: You are not assigned as the Psychiatric Consultant for this patient.
+        </p>
+      );
+    }
+  } else if (user.role === "BHCM") {
+    const careManager = patientData.providers.find((p) => p.providerType === "BHCM" && p.id === user.id);
+    if (!careManager) {
+      return (
+        <p className="text-red-500">
+          Access Denied: You are not assigned as the Behavioral Health Care Manager (BHCM) for this patient.
+        </p>
+      );
+    }
   }
 
   const careManager = patientData.providers.find((p) => p.providerType === "BHCM" && p.id === user.id);
-  if (!careManager) {
-    return (
-      <p className="text-red-500">
-        Access Denied: You are not assigned as the Behavioral Health Care Manager (BHCM) for this patient.
-      </p>
-    );
-  }
-
-  const careManagerId = careManager.id;
-  const showInitialAssessmentButton = patientData.status === "E" && patientData.clinicName;
-  const showFollowUpAssessmentButton = patientData.status === "T" && patientData.clinicName;
+  const careManagerId = careManager?.id || 0;
+  
+  const showInitialAssessmentButton = patientData.status === "E" && patientData.clinicName && user.role === "BHCM";
+  const showFollowUpAssessmentButton = patientData.status === "T" && patientData.clinicName && user.role === "BHCM";
 
   const totalAttemptPages = Math.ceil(attempts.length / itemsPerPage);
   const paginatedAttempts = attempts.slice((attemptPage - 1) * itemsPerPage, attemptPage * itemsPerPage);
@@ -777,7 +793,7 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
           <InitialAssessmentForm
             patientId={patientData.patientId}
             clinicId={patientData.clinicId}
-            careManagerId={careManagerId}
+            careManagerId={String(careManagerId)}
             onClose={() => setShowInitialAssessment(false)}
             onSuccess={handleInitialAssessmentSuccess}
             patientName={`${patientData.firstName} ${patientData.lastName}`}
@@ -797,14 +813,14 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
                   <span className="font-medium text-gray-600">Clinic:</span> {patientData.clinicName}
                 </div>
                 <div>
-                  <span className="font-medium text-gray-600">Care Manager:</span> {careManager.name}
+                  <span className="font-medium text-gray-600">Care Manager:</span> {careManager?.name}
                 </div>
               </div>
             </div>
             <FollowUpAssessmentForm
               patientId={patientData.patientId}
               clinicId={patientData.clinicId}
-              careManagerId={careManagerId}
+              careManagerId={String(careManagerId)}
               onClose={() => setShowFollowUpAssessment(false)}
               onSuccess={handleFollowUpAssessmentSuccess}
               patientName={`${patientData.firstName} ${patientData.lastName}`}
@@ -825,7 +841,7 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
           <ContactAttemptForm
             patientId={patientData.patientId}
             clinicId={patientData.clinicId}
-            careManagerId={careManagerId}
+            careManagerId={String(careManagerId)}
             onClose={() => setShowContactAttempt(false)}
             onSuccess={handleContactAttemptSuccess}
             patientName={`${patientData.firstName} ${patientData.lastName}`}
@@ -846,7 +862,7 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
           </DialogHeader>
           <SafetyPlanForm
             patientId={patientData.patientId}
-            careManagerId={careManagerId}
+            careManagerId={String(careManagerId)}
             onClose={() => setShowSafetyPlan(false)}
             onSuccess={handleSafetyPlanSuccess}
             initialData={latestSafetyPlan}

@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useContext } from "react";
 import { useSelector, useDispatch } from 'react-redux';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { RootState, AppDispatch } from '@/lib/store';
+import { UserContext } from '@/context/UserContext';
 import PatientEnrollment from '@/components/patient-enrollment';
 import RemindersSection from '@/components/RemindersSection';
 
@@ -60,13 +61,7 @@ function UsersIcon(props: React.JSX.IntrinsicAttributes & React.SVGProps<SVGSVGE
   );
 }
 
-interface DashboardProps {
-  user: {
-    id: string | number;
-    name: string;
-    role: string;
-  };
-}
+interface DashboardProps {}
 
 interface ClinicData {
   totalPatients: number;
@@ -76,8 +71,9 @@ interface ClinicData {
   newPatients: number;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
+export const Dashboard: React.FC<DashboardProps> = () => {
   const dispatch = useDispatch<AppDispatch>();
+  const user = useContext(UserContext);
   const selectedClinic = useSelector((state: RootState) => state.clinic.selectedClinic);
   const [clinicData, setClinicData] = useState<ClinicData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -245,7 +241,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
           </Card>
 
           {/* Reminders Section */}
-          <RemindersSection userId={user.id} className="bg-white" />
+          <RemindersSection userId={user?.id || ''} className="bg-white" />
         </div>
 
         {/* Date Range Selector */}
