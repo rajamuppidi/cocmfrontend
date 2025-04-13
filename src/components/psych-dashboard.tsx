@@ -199,7 +199,7 @@ const PsychDashboard: React.FC = () => {
                       <tr className="text-left border-b bg-gray-50">
                         <th className="px-4 py-3 font-medium text-gray-700">Patient Name</th>
                         <th className="px-4 py-3 font-medium text-gray-700">Referral Date</th>
-                        <th className="px-4 py-3 font-medium text-gray-700">Reason</th>
+                        <th className="px-4 py-3 font-medium text-gray-700">Notes</th>
                         <th className="px-4 py-3 font-medium text-gray-700">Actions</th>
                       </tr>
                     </thead>
@@ -208,7 +208,7 @@ const PsychDashboard: React.FC = () => {
                         <tr key={patient.id} className="border-b hover:bg-gray-50">
                           <td className="px-4 py-3">{patient.firstName} {patient.lastName}</td>
                           <td className="px-4 py-3">{patient.referralDate}</td>
-                          <td className="px-4 py-3">{patient.referralReason}</td>
+                          <td className="px-4 py-3">{patient.notes}</td>
                           <td className="px-4 py-3">
                             <Button 
                               variant="outline" 
