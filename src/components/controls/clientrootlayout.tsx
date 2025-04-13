@@ -123,7 +123,7 @@ const ClientRootLayout = ({ children }: ClientRootLayoutProps) => {
       if (pathname === '/admin') {
         if (activeTab === 'clinics') return <Clinics />;
         if (activeTab === 'users') return <Users />;
-        if (activeTab === 'settings') return <div>Settings Content</div>;
+        if (activeTab === 'settings') return <AdminDashboard />;
         return <Clinics />; // Default tab for admin
       }
     } else if (user?.role === 'Psychiatric Consultant') {
