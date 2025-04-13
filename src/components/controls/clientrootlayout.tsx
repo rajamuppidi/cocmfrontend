@@ -119,13 +119,11 @@ const ClientRootLayout = ({ children }: ClientRootLayoutProps) => {
   }
 
   const getActiveComponent = () => {
-    const tab = (pathname.includes('?') ? pathname.split('?')[1]?.split('=')[1] : null) || 'dashboard';
-    
     if (user?.role === 'Admin') {
       if (pathname === '/admin') {
-        if (tab === 'clinics') return <Clinics />;
-        if (tab === 'users') return <Users />;
-        if (tab === 'settings') return <AdminDashboard />;
+        if (activeTab === 'clinics') return <Clinics />;
+        if (activeTab === 'users') return <Users />;
+        if (activeTab === 'settings') return <div>Settings Content</div>;
         return <Clinics />; // Default tab for admin
       }
     } else if (user?.role === 'Psychiatric Consultant') {
