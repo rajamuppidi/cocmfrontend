@@ -110,9 +110,17 @@ const ClientRootLayout = ({ children }: ClientRootLayoutProps) => {
   useEffect(() => {
     if (user?.role === 'Admin') {
       const tab = searchParams.get('tab') || 'clinics';
+      console.log("Tab from URL:", tab);
       setActiveTab(tab);
     }
   }, [searchParams, user]);
+
+  // Log current state for debugging
+  useEffect(() => {
+    console.log("Current activeTab:", activeTab);
+    console.log("Current pathname:", pathname);
+    console.log("URL parameters:", Object.fromEntries(searchParams.entries()));
+  }, [activeTab, pathname, searchParams]);
 
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
@@ -121,6 +129,9 @@ const ClientRootLayout = ({ children }: ClientRootLayoutProps) => {
   const getActiveComponent = () => {
     if (user?.role === 'Admin') {
       if (pathname === '/admin') {
+        // For debugging
+        console.log("Rendering admin component with activeTab:", activeTab);
+        
         if (activeTab === 'clinics') return <Clinics />;
         if (activeTab === 'users') return <Users />;
         if (activeTab === 'settings') return <AdminDashboard />;

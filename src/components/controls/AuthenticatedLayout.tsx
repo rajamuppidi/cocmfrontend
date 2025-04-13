@@ -65,6 +65,7 @@ const AuthenticatedLayout = ({ children }: AuthenticatedLayoutProps) => {
   };
 
   const handleNavigation = (tab: string) => {
+    console.log(`Navigating to /admin with tab=${tab}`);
     router.push(`/admin?tab=${tab}`);
   };
 
