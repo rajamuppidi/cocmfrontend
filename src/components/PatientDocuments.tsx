@@ -14,26 +14,12 @@ import { Tooltip } from "@/components/ui/tooltip";
 
 interface File {
   name: string;
-  type: "PHQ-9" | "GAD-7" | "Contact_Attempt" | "Safety_Plan";
+  type: "PHQ-9" | "GAD-7" | "Contact_Attempt" | "Intake_Form";
   score?: number;
   answers?: number[];
   notes?: string;
   attemptDate?: string;
-  symptoms?: Record<string, string>;
-  columbiaSuicideSeverity?: string;
-  anxietyPanicAttacks?: string;
-  pastMentalHealth?: Record<string, string>;
-  psychiatricHospitalizations?: string;
-  substanceUse?: Record<string, string>;
-  medicalHistory?: Record<string, string>;
-  otherMedicalHistory?: string;
-  familyMentalHealth?: Record<string, string>;
-  socialSituation?: Record<string, string>;
-  currentMedications?: string;
-  pastMedications?: string;
-  narrative?: string;
-  safetyPlanDiscussed?: boolean;
-  minutes?: number;
+  contactDate?: string;
 }
 
 interface DocumentFolder {
@@ -61,6 +47,7 @@ export default function PatientDocuments({ patientId, open, onOpenChange }: Pati
 
   // Keep track of folder types for better organization
   const folderTypes = {
+    Intake_Form: { icon: <FileIcon className="text-purple-500" />, color: "bg-purple-50 text-purple-700" },
     Safety_Plan: { icon: <FileIcon className="text-orange-500" />, color: "bg-orange-50 text-orange-700" },
     Assessment: { icon: <FileText className="text-blue-500" />, color: "bg-blue-50 text-blue-700" },
     Contact_Attempt: { icon: <FilePlus className="text-green-500" />, color: "bg-green-50 text-green-700" }
@@ -85,23 +72,17 @@ export default function PatientDocuments({ patientId, open, onOpenChange }: Pati
         isOpen: false,
         files: folder.files.map((file) => ({
           ...file,
-          type: file.type as "PHQ-9" | "GAD-7" | "Contact_Attempt" | "Safety_Plan",
+          type: file.type as "PHQ-9" | "GAD-7" | "Contact_Attempt" | "Intake_Form",
           answers: file.answers || [],
-          symptoms: file.symptoms || {},
-          pastMentalHealth: file.pastMentalHealth || {},
-          substanceUse: file.substanceUse || {},
-          medicalHistory: file.medicalHistory || {},
-          familyMentalHealth: file.familyMentalHealth || {},
-          socialSituation: file.socialSituation || {},
         })),
       }));
       
       // Sort folders by date (newest first)
-      foldersWithOpen.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      foldersWithOpen.sort((a: DocumentFolder, b: DocumentFolder) => new Date(b.date).getTime() - new Date(a.date).getTime());
       
       setDocumentFolders(foldersWithOpen);
       if (foldersWithOpen.length > 0) setActiveFolder(foldersWithOpen[0].folderName);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching patient documents:", error);
       setFetchError(`Unable to load documents: ${error.message}`);
     }
@@ -122,7 +103,7 @@ export default function PatientDocuments({ patientId, open, onOpenChange }: Pati
 
   const handleViewFile = (file: File) => setSelectedFile(file);
 
-  const handleExportFile = async (contactDate: string, type: "PHQ-9" | "GAD-7" | "Contact_Attempt" | "Safety_Plan") => {
+  const handleExportFile = async (contactDate: string, type: "PHQ-9" | "GAD-7" | "Contact_Attempt" | "Intake_Form") => {
     setDownloadError(null);
     const folderExists = documentFolders.some((folder) => folder.date === contactDate);
     if (!folderExists) {
@@ -130,12 +111,15 @@ export default function PatientDocuments({ patientId, open, onOpenChange }: Pati
       return;
     }
     try {
-      const endpoint =
-        type === "Contact_Attempt"
-          ? `http://localhost:4353/api/patients/${patientId}/contact-attempts/${contactDate}/export`
-          : type === "Safety_Plan"
-          ? `http://localhost:4353/api/patients/${patientId}/safety-plans/${contactDate}/export`
-          : `http://localhost:4353/api/patients/${patientId}/assessments/${contactDate}/${type}/export`;
+      let endpoint;
+      if (type === "Contact_Attempt") {
+        endpoint = `http://localhost:4353/api/patients/${patientId}/contact-attempts/${contactDate}/export`;
+      } else if (type === "Intake_Form") {
+        endpoint = `http://localhost:4353/api/patients/${patientId}/intake/${contactDate}/export`;
+      } else {
+        endpoint = `http://localhost:4353/api/patients/${patientId}/assessments/${contactDate}/${type}/export`;
+      }
+      
       const response = await fetch(endpoint, {
         method: "GET",
         credentials: "include",
@@ -152,7 +136,7 @@ export default function PatientDocuments({ patientId, open, onOpenChange }: Pati
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-    } catch (error) {
+    } catch (error: any) {
       setDownloadError(`Failed to download PDF: ${error.message}`);
     }
   };
@@ -163,8 +147,8 @@ export default function PatientDocuments({ patientId, open, onOpenChange }: Pati
 
   // Create separate category groupings for folder sidebar
   const foldersByCategory = {
-    "Safety Plans": documentFolders.filter(folder => folder.folderName.includes("Safety_Plan")),
     "Assessments": documentFolders.filter(folder => folder.folderName.includes("Assessment")),
+    "Intake Forms": documentFolders.filter(folder => folder.folderName.includes("Intake_Form")),
     "Contact Attempts": documentFolders.filter(folder => folder.folderName.includes("Contact_Attempt"))
   };
   
@@ -185,13 +169,37 @@ export default function PatientDocuments({ patientId, open, onOpenChange }: Pati
       case "PHQ-9":
       case "GAD-7":
         return <FileText className="w-10 h-10 text-blue-500" />;
-      case "Safety_Plan":
-        return <FileIcon className="w-10 h-10 text-orange-500" />;
       case "Contact_Attempt":
         return <FilePlus className="w-10 h-10 text-green-500" />;
+      case "Intake_Form":
+        return <FileIcon className="w-10 h-10 text-purple-500" />;
       default:
         return <FileText className="w-10 h-10 text-gray-500" />;
     }
+  };
+
+  // For questions in the assessment viewer
+  const questions = {
+    "PHQ-9": [
+      "Little interest or pleasure in doing things",
+      "Feeling down, depressed, or hopeless",
+      "Trouble falling or staying asleep, or sleeping too much",
+      "Feeling tired or having little energy",
+      "Poor appetite or overeating",
+      "Feeling bad about yourself",
+      "Trouble concentrating on things",
+      "Moving or speaking so slowly",
+      "Thoughts that you would be better off dead",
+    ],
+    "GAD-7": [
+      "Feeling nervous, anxious, or on edge",
+      "Not being able to stop or control worrying",
+      "Worrying too much about different things",
+      "Trouble relaxing",
+      "Being so restless that it is hard to sit still",
+      "Becoming easily annoyed or irritable",
+      "Feeling afraid as if something awful might happen",
+    ]
   };
 
   return (
@@ -502,62 +510,30 @@ export default function PatientDocuments({ patientId, open, onOpenChange }: Pati
                       </p>
                     </div>
                   </div>
-                ) : selectedFile.type === "Safety_Plan" ? (
+                ) : selectedFile.type === "Intake_Form" ? (
                   <div className="space-y-6">
                     <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
-                      <h3 className="text-lg font-medium text-gray-800 mb-4">Safety Plan Overview</h3>
+                      <h3 className="text-lg font-medium text-gray-800 mb-4">Patient Intake Form</h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <p className="text-sm text-gray-500 font-medium">Date</p>
-                          <p className="text-base text-gray-900">{activeFolderData?.date}</p>
+                          <p className="text-base text-gray-900">{selectedFile.contactDate}</p>
                         </div>
                         <div>
-                          <p className="text-sm text-gray-500 font-medium">Safety Plan Discussed</p>
-                          <p className="text-base text-gray-900">{selectedFile.safetyPlanDiscussed ? "Yes" : "No"}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-500 font-medium">Duration</p>
-                          <p className="text-base text-gray-900">{selectedFile.minutes} minutes</p>
+                          <p className="text-sm text-gray-500 font-medium">Type</p>
+                          <p className="text-base text-gray-900">Patient Intake Form</p>
                         </div>
                       </div>
                     </div>
                     
-                    {/* Symptoms section */}
                     <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
-                      <h3 className="text-lg font-medium text-gray-800 mb-4">Current Symptoms</h3>
-                      {selectedFile.symptoms && Object.keys(selectedFile.symptoms).length > 0 ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                          {Object.entries(selectedFile.symptoms).map(([key, value]) => (
-                            <div key={key} className="flex items-center">
-                              <div className={`w-3 h-3 rounded-full ${value === 'Yes' ? 'bg-red-500' : 'bg-gray-300'} mr-2`}></div>
-                              <span className="text-sm text-gray-700">{key}: <span className={value === 'Yes' ? 'font-medium text-red-600' : ''}>{value}</span></span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-gray-600">No symptoms recorded</p>
-                      )}
-                    </div>
-                    
-                    {/* Critical indicators */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="bg-amber-50 p-5 rounded-lg border border-amber-200">
-                        <h3 className="text-lg font-medium text-amber-800 mb-2">Columbia Suicide Severity</h3>
-                        <p className="text-base text-gray-900">{selectedFile.columbiaSuicideSeverity}</p>
-                      </div>
-                      <div className="bg-blue-50 p-5 rounded-lg border border-blue-200">
-                        <h3 className="text-lg font-medium text-blue-800 mb-2">Anxiety/Panic Attacks</h3>
-                        <p className="text-base text-gray-900">{selectedFile.anxietyPanicAttacks}</p>
-                      </div>
-                    </div>
-                    
-                    {/* Add more sections for other safety plan data... */}
-                    
-                    {/* Narrative section */}
-                    <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
-                      <h3 className="text-lg font-medium text-gray-800 mb-4">Narrative</h3>
-                      <p className="text-base text-gray-900 whitespace-pre-wrap">
-                        {selectedFile.narrative || "No narrative provided"}
+                      <h3 className="text-lg font-medium text-gray-800 mb-4">Form Information</h3>
+                      <p className="text-base text-gray-700">
+                        This is a comprehensive intake assessment form that includes patient symptoms, mental health history, 
+                        substance use history, medical history, family mental health history, and social situation details.
+                      </p>
+                      <p className="mt-2 text-base text-gray-700">
+                        Use the Export button below to download the complete intake form as a PDF.
                       </p>
                     </div>
                   </div>
@@ -585,30 +561,11 @@ export default function PatientDocuments({ patientId, open, onOpenChange }: Pati
                       <h3 className="text-lg font-medium text-gray-800 mb-4">Questions & Answers</h3>
                       <div className="space-y-3">
                         {selectedFile.answers?.map((answer, index) => {
-                          const questions = {
-                            "PHQ-9": [
-                              "Little interest or pleasure in doing things",
-                              "Feeling down, depressed, or hopeless",
-                              "Trouble falling or staying asleep, or sleeping too much",
-                              "Feeling tired or having little energy",
-                              "Poor appetite or overeating",
-                              "Feeling bad about yourself",
-                              "Trouble concentrating on things",
-                              "Moving or speaking so slowly",
-                              "Thoughts that you would be better off dead",
-                            ],
-                            "GAD-7": [
-                              "Feeling nervous, anxious, or on edge",
-                              "Not being able to stop or control worrying",
-                              "Worrying too much about different things",
-                              "Trouble relaxing",
-                              "Being so restless that it is hard to sit still",
-                              "Becoming easily annoyed or irritable",
-                              "Feeling afraid as if something awful might happen",
-                            ],
-                          };
                           const options = ["Not at all", "Several days", "More than half the days", "Nearly every day"];
-                          const question = questions[selectedFile.type]?.[index] || `Question ${index + 1}`;
+                          const question = 
+                            selectedFile.type === "PHQ-9" || selectedFile.type === "GAD-7" 
+                              ? questions[selectedFile.type]?.[index] || `Question ${index + 1}`
+                              : `Question ${index + 1}`;
                           const selectedOption = options[answer] || "Not answered";
                           
                           return (

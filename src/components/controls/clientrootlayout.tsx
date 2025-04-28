@@ -80,7 +80,7 @@ const ClientRootLayout = ({ children }: ClientRootLayoutProps) => {
             } else if (data.role !== 'Admin' && data.role !== 'Psychiatric Consultant') {
               const allowedPaths = ['/dashboard', '/active-patients', '/enrolled-patients', '/patients'];
               if (!allowedPaths.some(path => pathname.startsWith(path))) {
-                router.push('/dashboard');
+              router.push('/dashboard');
               }
             }
 

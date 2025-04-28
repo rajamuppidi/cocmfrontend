@@ -145,55 +145,6 @@ export default function InitialAssessmentForm({
 
   const calculateScore = (answers: number[]) => answers.reduce((sum, score) => sum + score, 0);
 
-  // const onSubmit = async (data: any) => {
-  //   if (!user || !user.id) {
-  //     setFormMessage({ type: "error", text: "User information is missing. Please log in again." });
-  //     return;
-  //   }
-
-  //   const phq9Score = calculateScore(data.phq9Answers);
-  //   const gad7Score = calculateScore(data.gad7Answers);
-
-  //   const formattedData = {
-  //     patientId,
-  //     clinicId: effectiveClinicId,
-  //     createdBy: user.id,
-  //     contactDate: format(data.contactDate, 'yyyy-MM-dd'),
-  //     phq9Score,
-  //     gad7Score,
-  //     phq9Answers: data.phq9Answers,
-  //     gad7Answers: data.gad7Answers,
-  //     discussWithConsultant: data.discussWithConsultant,
-  //     psychiatricConsultantId: data.discussWithConsultant ? data.psychiatricConsultantId : null,
-  //     consultantNotes: data.consultantNotes,
-  //     sessionType: data.sessionType,
-  //     sessionDuration: data.sessionDuration
-  //   };
-
-  //   try {
-  //     const response = await fetch('http://localhost:4353/api/initial-assessment', {
-  //       method: 'POST',
-  //       headers: { 'Content-Type': 'application/json' },
-  //       body: JSON.stringify(formattedData)
-  //     });
-
-  //     if (response.ok) {
-  //       setFormMessage({ type: 'success', text: 'Initial assessment submitted successfully.' });
-  //       setTimeout(() => {
-  //         onSuccess();
-  //         router.push(`/patients/${patientId}`);
-  //       }, 2000);
-  //     } else {
-  //       setFormMessage({ type: 'error', text: 'Failed to submit the assessment. Please try again.' });
-  //     }
-  //   } catch (error) {
-  //     console.error('Error submitting assessment:', error);
-  //     setFormMessage({ type: 'error', text: 'An unexpected error occurred. Please try again.' });
-  //   }
-  // };
-
-  // In InitialAssessmentForm.tsx, modify the onSubmit function:
-
   const onSubmit = async (data: any) => {
     if (!user || !user.id) {
       setFormMessage({ type: "error", text: "User information is missing. Please log in again." });

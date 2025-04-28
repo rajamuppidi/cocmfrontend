@@ -5,7 +5,7 @@ import InitialAssessmentForm from "./InitialAssessmentForm";
 import FollowUpAssessmentForm from "./FollowUpAssessmentForm";
 import ContactAttemptForm from "./ContactAttemptForm";
 import PatientDocuments from "./PatientDocuments";
-import SafetyPlanForm from "./SafetyPlanForm";
+import IntakeForm from "./IntakeForm";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -85,7 +85,7 @@ interface LastContactInfo {
   clinicName: string;
 }
 
-interface SafetyPlanData {
+interface IntakeFormData {
   contactDate: string;
   symptoms: Record<string, boolean>;
   columbiaSuicideSeverity: string;
@@ -124,8 +124,8 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
   const [showFollowUpAssessment, setShowFollowUpAssessment] = useState(false);
   const [showContactAttempt, setShowContactAttempt] = useState(false);
   const [showDocuments, setShowDocuments] = useState(false);
-  const [showSafetyPlan, setShowSafetyPlan] = useState(false);
-  const [showSafetyPlanWarning, setShowSafetyPlanWarning] = useState(false);
+  const [showIntakeForm, setShowIntakeForm] = useState(false);
+  const [showIntakeFormWarning, setShowIntakeFormWarning] = useState(false);
   const [expandedPHQ9, setExpandedPHQ9] = useState(false);
   const [expandedGAD7, setExpandedGAD7] = useState(false);
   const [phq9Data, setPHQ9Data] = useState<Array<{ date: string; score: number }>>([]);
@@ -144,7 +144,7 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
   });
   const [lastContactInfo, setLastContactInfo] = useState<LastContactInfo | null>(null);
   const [treatmentHistory, setTreatmentHistory] = useState<TreatmentHistoryEntry[]>([]);
-  const [latestSafetyPlan, setLatestSafetyPlan] = useState<SafetyPlanData | null>(null);
+  const [latestIntakeForm, setLatestIntakeForm] = useState<IntakeFormData | null>(null);
   const [attempts, setAttempts] = useState<ContactAttempt[]>([]);
   const [attemptPage, setAttemptPage] = useState(1);
   const itemsPerPage = 5;
@@ -232,15 +232,46 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
     }
   };
 
-  const fetchLatestSafetyPlan = async () => {
+  const fetchLatestIntakeForm = async () => {
     if (!patientData) return;
     try {
-      const response = await fetch(`http://localhost:4353/api/safety-plan/${patientData.patientId}/latest`);
-      if (!response.ok) throw new Error("Failed to fetch safety plan");
-      const data = await response.json();
-      setLatestSafetyPlan(data);
+      console.log("Fetching latest intake form for patient ID:", patientData.patientId);
+      const url = `http://localhost:4353/api/patient-intake/${patientData.patientId}/latest`;
+      console.log("Fetch URL:", url);
+      
+      const response = await fetch(url);
+      console.log("Fetch response status:", response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log("Latest intake form data received:", data);
+        setLatestIntakeForm(data);
+      } else {
+        console.log("No intake form found or error fetching form. Status:", response.status);
+        if (response.status === 404 && patientData.status === "A") {
+          console.log("Creating dummy intake form for Active patient");
+          setLatestIntakeForm({
+            contactDate: new Date().toISOString().split('T')[0],
+            symptoms: {},
+            columbiaSuicideSeverity: "",
+            anxietyPanicAttacks: "",
+            pastMentalHealth: {},
+            psychiatricHospitalizations: "",
+            substanceUse: {},
+            medicalHistory: {},
+            otherMedicalHistory: "",
+            familyMentalHealth: {},
+            socialSituation: {},
+            currentMedications: "",
+            pastMedications: "",
+            narrative: "",
+            safetyPlanDiscussed: true,
+            minutes: 0
+          });
+        }
+      }
     } catch (error) {
-      console.error("Error fetching safety plan:", error);
+      console.error("Error fetching intake form:", error);
     }
   };
 
@@ -287,12 +318,68 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
     }
   };
 
-  const handleSafetyPlanSuccess = () => {
-    setShowSafetyPlan(false);
-    setShowSafetyPlanWarning(false);
+  const handleIntakeFormSuccess = () => {
+    setShowIntakeForm(false);
+    setShowIntakeFormWarning(false);
+    
+    console.log("Intake form completed successfully, refreshing data...");
+    
     if (patientId) {
+      // Immediately update local patient data status to show UI changes
+      if (patientData) {
+        const updatedPatientData = { ...patientData, status: "A" };
+        console.log("Updating patient status to Active in local state");
+        setPatientData(updatedPatientData);
+      }
+      
+      // Refresh all data from the server
+      fetchPatientData(patientId);
       fetchPatientFlags(patientId);
-      fetchLatestSafetyPlan();
+      fetchLatestIntakeForm();
+      fetchTreatmentHistory();
+      fetchLastUpdateInfo("PHQ-9");
+      fetchLastUpdateInfo("GAD-7");
+      fetchLastContactInfo();
+      
+      // Delayed verification to ensure all data is refreshed
+      setTimeout(() => {
+        console.log("Verifying patient data after refresh");
+        
+        // Force a refetch of the latest intake form to ensure we have the most current data
+        fetch(`http://localhost:4353/api/patient-intake/${patientId}/latest`)
+          .then(response => {
+            if (response.ok) return response.json();
+            throw new Error("Failed to fetch updated intake form data");
+          })
+          .then(data => {
+            console.log("Verified latest intake form:", data);
+            
+            setLatestIntakeForm(data);
+            
+            // Get fresh patient data to verify status
+            return fetch(`http://localhost:4353/api/patients/${patientId}`);
+          })
+          .then(response => {
+            if (response.ok) return response.json();
+            throw new Error("Failed to fetch updated patient data");
+          })
+          .then(patientData => {
+            console.log("Verified patient data:", patientData);
+            console.log("Verified patient status:", patientData?.status);
+            
+            setPatientData(patientData);
+            
+            // Only show the prompt if the intake form exists
+            if (latestIntakeForm) {
+              if (confirm("Patient Intake completed. Would you like to proceed with the Initial Assessment?")) {
+                setShowInitialAssessment(true);
+              }
+            }
+          })
+          .catch(error => {
+            console.error("Error in verification process:", error);
+          });
+      }, 1500); // Increase timeout to ensure data is refreshed
     }
   };
 
@@ -311,7 +398,7 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
       fetchLastUpdateInfo("GAD-7");
       fetchLastContactInfo();
       fetchTreatmentHistory();
-      fetchLatestSafetyPlan();
+      fetchLatestIntakeForm();
       fetchContactAttempts();
     }
   }, [patientData]);
@@ -325,12 +412,18 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
   }, [expandedGAD7]);
 
   useEffect(() => {
-    if (flags.includes("Safety Plan") && (!latestSafetyPlan || !latestSafetyPlan.safetyPlanDiscussed)) {
-      setShowSafetyPlanWarning(true);
+    // Don't show warning if patient is already in Active status or if intake form exists
+    if (patientData?.status === "A" || latestIntakeForm) {
+      setShowIntakeFormWarning(false);
     } else {
-      setShowSafetyPlanWarning(false);
+      setShowIntakeFormWarning(true);
     }
-  }, [flags, latestSafetyPlan]);
+    
+    // Add debug logging
+    console.log("Latest intake form updated:", latestIntakeForm);
+    console.log("Patient status:", patientData?.status);
+    console.log("Showing intake warning:", !(patientData?.status === "A") && !latestIntakeForm);
+  }, [latestIntakeForm, patientData]);
 
   if (loading) return <p>Loading patient data...</p>;
   if (error) return <p className="text-red-500">Error: {error}</p>;
@@ -361,21 +454,52 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
       );
     }
   } else if (user.role === "BHCM") {
-    const careManager = patientData.providers.find((p) => p.providerType === "BHCM" && p.id === user.id);
-    if (!careManager) {
-      return (
-        <p className="text-red-500">
-          Access Denied: You are not assigned as the Behavioral Health Care Manager (BHCM) for this patient.
-        </p>
-      );
-    }
+  const careManager = patientData.providers.find((p) => p.providerType === "BHCM" && p.id === user.id);
+  if (!careManager) {
+    return (
+      <p className="text-red-500">
+        Access Denied: You are not assigned as the Behavioral Health Care Manager (BHCM) for this patient.
+      </p>
+    );
+  }
   }
 
   const careManager = patientData.providers.find((p) => p.providerType === "BHCM" && p.id === user.id);
   const careManagerId = careManager?.id || 0;
   
-  const showInitialAssessmentButton = patientData.status === "E" && patientData.clinicName && user.role === "BHCM";
-  const showFollowUpAssessmentButton = patientData.status === "T" && patientData.clinicName && user.role === "BHCM";
+  const userRoleIsCareManager = user?.role?.toUpperCase() === "BHCM" || 
+                               user?.role?.toLowerCase() === "bhcm" ||
+                               user?.role?.includes("Care Manager");
+  
+  const patientStatusAllowsAssessment = patientData?.status === "E" || patientData?.status === "A";
+  
+  // If intake form exists or patient is already Active, consider intake completed
+  const hasCompletedIntakeForm = Boolean(latestIntakeForm) || patientData?.status === "A";
+  
+  // Determine if an initial assessment exists in treatment history
+  const hasInitialAssessment = treatmentHistory.some(entry => 
+    entry.assessment_type === "Initial Assessment"
+  );
+  
+  // Update to show initial assessment button only if they haven't already done one
+  const showInitialAssessmentButton = patientStatusAllowsAssessment && 
+    patientData?.clinicName && userRoleIsCareManager && hasCompletedIntakeForm && 
+    !hasInitialAssessment; // Don't show if they already have an initial assessment
+  
+  // Debug the button visibility
+  console.log("Initial assessment button conditions:");
+  console.log("- Patient status:", patientData?.status);
+  console.log("- Status allows assessment:", patientStatusAllowsAssessment);
+  console.log("- Has completed intake form:", hasCompletedIntakeForm);
+  console.log("- Is care manager:", userRoleIsCareManager);
+  console.log("- Has clinic name:", Boolean(patientData?.clinicName));
+  console.log("- Has initial assessment:", hasInitialAssessment);
+  console.log("Show initial assessment button:", showInitialAssessmentButton);
+  
+  const showFollowUpAssessmentButton = patientData?.status === "A" && 
+    patientData?.clinicName && user?.role === "BHCM" && hasInitialAssessment;
+  
+  const showIntakeFormButton = patientData?.status === "E" && patientData?.clinicName && user?.role === "BHCM" && !hasCompletedIntakeForm;
 
   const totalAttemptPages = Math.ceil(attempts.length / itemsPerPage);
   const paginatedAttempts = attempts.slice((attemptPage - 1) * itemsPerPage, attemptPage * itemsPerPage);
@@ -400,7 +524,7 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
             <div className="bg-black text-white px-4 py-2 rounded-lg font-semibold">On Psychiatric Consultation</div>
           )}
           {flags.includes("Safety Plan") && (
-            <div className="bg-red-500 text-white px-4 py-2 rounded-lg font-semibold">Safety Plan</div>
+            <div className="bg-red-600 text-white px-4 py-2 rounded-lg font-semibold">Safety Plan</div>
           )}
         </div>
       </div>
@@ -515,6 +639,14 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
         {/* Main Content */}
         <div className="w-3/4">
           <div className="flex space-x-2 mb-4">
+            {showIntakeFormButton && (
+              <Button
+                onClick={() => setShowIntakeForm(true)}
+                className="bg-purple-500 hover:bg-purple-600 text-white"
+              >
+                Start Patient Intake
+              </Button>
+            )}
             {showInitialAssessmentButton && (
               <Button
                 onClick={() => setShowInitialAssessment(true)}
@@ -543,15 +675,73 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
             >
               <FaFolder className="mr-2" /> View Patient Documents
             </Button>
-            {flags.includes("Safety Plan") && (
-              <Button
-                onClick={() => setShowSafetyPlan(true)}
-                className="bg-red-500 hover:bg-red-600 text-white"
-              >
-                Safety Plan Discussion
-              </Button>
-            )}
           </div>
+
+          {/* Add workflow progress indicator for enrolled patients */}
+          {patientData.status === "E" && (
+            <div className="mb-4 bg-blue-50 p-4 rounded-lg border border-blue-100">
+              <h3 className="text-lg font-semibold mb-2">Enrollment Workflow</h3>
+              <div className="flex items-center">
+                <div className={`rounded-full w-8 h-8 flex items-center justify-center text-white ${hasCompletedIntakeForm ? 'bg-green-500' : 'bg-blue-500'}`}>
+                  1
+                </div>
+                <div className="h-1 w-12 bg-gray-300 mx-2"></div>
+                <div className={`rounded-full w-8 h-8 flex items-center justify-center text-white ${showInitialAssessmentButton ? 'bg-blue-500' : 'bg-gray-400'}`}>
+                  2
+                </div>
+                <div className="h-1 w-12 bg-gray-300 mx-2"></div>
+                <div className="rounded-full w-8 h-8 flex items-center justify-center text-white bg-gray-400">
+                  3
+                </div>
+                <div className="ml-4">
+                  <div className="flex flex-col text-sm">
+                    <span className={`font-medium ${hasCompletedIntakeForm ? 'text-green-600' : 'text-blue-600'}`}>
+                      1. Complete Patient Intake {hasCompletedIntakeForm && '✓'}
+                    </span>
+                    <span className={`font-medium ${showInitialAssessmentButton ? 'text-blue-600' : 'text-gray-500'}`}>
+                      2. Complete Initial Assessment
+                    </span>
+                    <span className="font-medium text-gray-500">
+                      3. Begin Treatment
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Add workflow progress indicator for active patients */}
+          {patientData.status === "A" && (
+            <div className="mb-4 bg-blue-50 p-4 rounded-lg border border-blue-100">
+              <h3 className="text-lg font-semibold mb-2">Treatment Workflow</h3>
+              <div className="flex items-center">
+                <div className="rounded-full w-8 h-8 flex items-center justify-center text-white bg-green-500">
+                  1
+                </div>
+                <div className="h-1 w-12 bg-gray-300 mx-2"></div>
+                <div className={`rounded-full w-8 h-8 flex items-center justify-center text-white ${hasInitialAssessment ? 'bg-green-500' : (showInitialAssessmentButton ? 'bg-blue-500' : 'bg-gray-400')}`}>
+                  2
+                </div>
+                <div className="h-1 w-12 bg-gray-300 mx-2"></div>
+                <div className={`rounded-full w-8 h-8 flex items-center justify-center text-white ${showFollowUpAssessmentButton ? 'bg-blue-500' : 'bg-gray-400'}`}>
+                  3
+                </div>
+                <div className="ml-4">
+                  <div className="flex flex-col text-sm">
+                    <span className="font-medium text-green-600">
+                      1. Complete Patient Intake ✓
+                    </span>
+                    <span className={`font-medium ${hasInitialAssessment ? 'text-green-600' : (showInitialAssessmentButton ? 'text-blue-600' : 'text-gray-500')}`}>
+                      2. Complete Initial Assessment {hasInitialAssessment && '✓'}
+                    </span>
+                    <span className={`font-medium ${showFollowUpAssessmentButton ? 'text-blue-600' : 'text-gray-500'}`}>
+                      3. Continue with Follow-up Assessments {hasInitialAssessment && showFollowUpAssessmentButton && '→'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Patient Information */}
           <div className="bg-white rounded-lg shadow-md p-6 mb-6">
@@ -728,57 +918,57 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
             )}
           </div>
 
-          {/* Safety Plan */}
+          {/* Intake Assessment */}
           <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-            <h2 className="text-xl font-semibold mb-4">Safety Plan</h2>
-            {latestSafetyPlan ? (
+            <h2 className="text-xl font-semibold mb-4">Patient Intake</h2>
+            {latestIntakeForm ? (
               <div>
-                <p><strong>Date:</strong> {latestSafetyPlan.contactDate}</p>
-                <p><strong>Symptoms:</strong> {Object.entries(latestSafetyPlan.symptoms)
+                <p><strong>Date:</strong> {latestIntakeForm.contactDate}</p>
+                <p><strong>Symptoms:</strong> {Object.entries(latestIntakeForm.symptoms)
                   .filter(([_, value]) => value)
                   .map(([key]) => key.replace(/([A-Z])/g, " $1").trim()).join(", ")}</p>
-                {latestSafetyPlan.columbiaSuicideSeverity && (
-                  <p><strong>Columbia Suicide Severity:</strong> {latestSafetyPlan.columbiaSuicideSeverity}</p>
+                {latestIntakeForm.columbiaSuicideSeverity && (
+                  <p><strong>Columbia Suicide Severity:</strong> {latestIntakeForm.columbiaSuicideSeverity}</p>
                 )}
-                {latestSafetyPlan.anxietyPanicAttacks && (
-                  <p><strong>Anxiety/Panic Attacks:</strong> {latestSafetyPlan.anxietyPanicAttacks}</p>
+                {latestIntakeForm.anxietyPanicAttacks && (
+                  <p><strong>Anxiety/Panic Attacks:</strong> {latestIntakeForm.anxietyPanicAttacks}</p>
                 )}
-                <p><strong>Past Mental Health:</strong> {Object.entries(latestSafetyPlan.pastMentalHealth)
+                <p><strong>Past Mental Health:</strong> {Object.entries(latestIntakeForm.pastMentalHealth)
                   .filter(([_, value]) => value)
                   .map(([key]) => key.replace(/([A-Z])/g, " $1").trim()).join(", ")}</p>
-                {latestSafetyPlan.psychiatricHospitalizations && (
-                  <p><strong>Psychiatric Hospitalizations:</strong> {latestSafetyPlan.psychiatricHospitalizations}</p>
+                {latestIntakeForm.psychiatricHospitalizations && (
+                  <p><strong>Psychiatric Hospitalizations:</strong> {latestIntakeForm.psychiatricHospitalizations}</p>
                 )}
-                <p><strong>Substance Use:</strong> {Object.entries(latestSafetyPlan.substanceUse)
+                <p><strong>Substance Use:</strong> {Object.entries(latestIntakeForm.substanceUse)
                   .map(([key, value]) => `${key.replace(/([A-Z])/g, " $1").trim()}: ${value.current ? "Current" : ""}${value.current && value.past ? ", " : ""}${value.past ? "Past" : ""}`)
                   .filter((entry) => entry.includes("Current") || entry.includes("Past"))
                   .join(", ")}</p>
-                <p><strong>Medical History:</strong> {Object.entries(latestSafetyPlan.medicalHistory)
+                <p><strong>Medical History:</strong> {Object.entries(latestIntakeForm.medicalHistory)
                   .filter(([_, value]) => value)
                   .map(([key]) => key.replace(/([A-Z])/g, " $1").trim()).join(", ")}</p>
-                {latestSafetyPlan.otherMedicalHistory && (
-                  <p><strong>Other Medical History:</strong> {latestSafetyPlan.otherMedicalHistory}</p>
+                {latestIntakeForm.otherMedicalHistory && (
+                  <p><strong>Other Medical History:</strong> {latestIntakeForm.otherMedicalHistory}</p>
                 )}
-                <p><strong>Family Mental Health:</strong> {Object.entries(latestSafetyPlan.familyMentalHealth)
+                <p><strong>Family Mental Health:</strong> {Object.entries(latestIntakeForm.familyMentalHealth)
                   .filter(([_, value]) => value)
                   .map(([key]) => key.replace(/([A-Z])/g, " $1").trim()).join(", ")}</p>
-                <p><strong>Social Situation:</strong> {Object.entries(latestSafetyPlan.socialSituation)
+                <p><strong>Social Situation:</strong> {Object.entries(latestIntakeForm.socialSituation)
                   .map(([key, value]) => `${key.replace(/([A-Z])/g, " $1").trim()}: ${value}`)
                   .join(", ")}</p>
-                {latestSafetyPlan.currentMedications && (
-                  <p><strong>Current Medications:</strong> {latestSafetyPlan.currentMedications}</p>
+                {latestIntakeForm.currentMedications && (
+                  <p><strong>Current Medications:</strong> {latestIntakeForm.currentMedications}</p>
                 )}
-                {latestSafetyPlan.pastMedications && (
-                  <p><strong>Past Medications:</strong> {latestSafetyPlan.pastMedications}</p>
+                {latestIntakeForm.pastMedications && (
+                  <p><strong>Past Medications:</strong> {latestIntakeForm.pastMedications}</p>
                 )}
-                {latestSafetyPlan.narrative && (
-                  <p><strong>Narrative:</strong> {latestSafetyPlan.narrative}</p>
+                {latestIntakeForm.narrative && (
+                  <p><strong>Narrative:</strong> {latestIntakeForm.narrative}</p>
                 )}
-                <p><strong>Safety Plan Discussed:</strong> {latestSafetyPlan.safetyPlanDiscussed ? "Yes" : "No"}</p>
-                <p><strong>Minutes Spent:</strong> {latestSafetyPlan.minutes}</p>
-                </div>
+                <p><strong>Patient Intake Completed:</strong> {latestIntakeForm.safetyPlanDiscussed ? "Yes" : "No"}</p>
+                <p><strong>Minutes Spent:</strong> {latestIntakeForm.minutes}</p>
+              </div>
             ) : (
-              <p>No safety plan discussion recorded.</p>
+              <p>No patient intake recorded.</p>
             )}
           </div>
         </div>
@@ -790,16 +980,18 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold">Initial Assessment</DialogTitle>
           </DialogHeader>
-          <InitialAssessmentForm
-            patientId={patientData.patientId}
-            clinicId={patientData.clinicId}
-            careManagerId={String(careManagerId)}
-            onClose={() => setShowInitialAssessment(false)}
-            onSuccess={handleInitialAssessmentSuccess}
-            patientName={`${patientData.firstName} ${patientData.lastName}`}
-            mrn={patientData.mrn}
-            clinicName={patientData.clinicName}
-          />
+          {patientData && (
+            <InitialAssessmentForm
+              patientId={patientData.patientId}
+              clinicId={patientData.clinicId}
+              careManagerId={Number(careManagerId)}
+              onClose={() => setShowInitialAssessment(false)}
+              onSuccess={handleInitialAssessmentSuccess}
+              patientName={`${patientData.firstName} ${patientData.lastName}`}
+              mrn={patientData.mrn}
+              clinicName={patientData.clinicName}
+            />
+          )}
         </DialogContent>
       </Dialog>
 
@@ -810,24 +1002,25 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
             <div className="bg-blue-50 rounded-lg p-4 mb-4 border border-blue-100">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="font-medium text-gray-600">Clinic:</span> {patientData.clinicName}
+                  <span className="font-medium text-gray-600">Clinic:</span> {patientData?.clinicName}
                 </div>
                 <div>
                   <span className="font-medium text-gray-600">Care Manager:</span> {careManager?.name}
                 </div>
               </div>
             </div>
-            <FollowUpAssessmentForm
-              patientId={patientData.patientId}
-              clinicId={patientData.clinicId}
-              careManagerId={String(careManagerId)}
-              onClose={() => setShowFollowUpAssessment(false)}
-              onSuccess={handleFollowUpAssessmentSuccess}
-              patientName={`${patientData.firstName} ${patientData.lastName}`}
-              mrn={patientData.mrn}
-              clinicName={patientData.clinicName}
-              className="space-y-6"
-            />
+            {patientData && (
+              <FollowUpAssessmentForm
+                patientId={patientData.patientId}
+                clinicId={patientData.clinicId}
+                careManagerId={Number(careManagerId)}
+                onClose={() => setShowFollowUpAssessment(false)}
+                onSuccess={handleFollowUpAssessmentSuccess}
+                patientName={`${patientData.firstName} ${patientData.lastName}`}
+                mrn={patientData.mrn}
+                clinicName={patientData.clinicName}
+              />
+            )}
           </div>
         </DialogContent>
       </Dialog>
@@ -838,68 +1031,76 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
           <DialogHeader>
             <DialogTitle className="text-xl font-semibold text-gray-900">Record Contact Attempt</DialogTitle>
           </DialogHeader>
-          <ContactAttemptForm
-            patientId={patientData.patientId}
-            clinicId={patientData.clinicId}
-            careManagerId={String(careManagerId)}
-            onClose={() => setShowContactAttempt(false)}
-            onSuccess={handleContactAttemptSuccess}
-            patientName={`${patientData.firstName} ${patientData.lastName}`}
-            mrn={patientData.mrn}
-            clinicName={patientData.clinicName}
-          />
+          {patientData && (
+            <ContactAttemptForm
+              patientId={patientData.patientId}
+              clinicId={patientData.clinicId}
+              careManagerId={Number(careManagerId)}
+              onClose={() => setShowContactAttempt(false)}
+              onSuccess={handleContactAttemptSuccess}
+              patientName={`${patientData.firstName} ${patientData.lastName}`}
+              mrn={patientData.mrn}
+              clinicName={patientData.clinicName}
+            />
+          )}
         </DialogContent>
       </Dialog>
 
       {/* Patient Documents Dialog */}
-      <PatientDocuments patientId={patientId} open={showDocuments} onOpenChange={setShowDocuments} />
+      <PatientDocuments 
+        patientId={patientId} 
+        open={showDocuments} 
+        onOpenChange={setShowDocuments}
+      />
 
-      {/* Safety Plan Dialog */}
-      <Dialog open={showSafetyPlan} onOpenChange={setShowSafetyPlan}>
+      {/* Intake Form Dialog */}
+      <Dialog open={showIntakeForm} onOpenChange={setShowIntakeForm}>
         <DialogContent className="max-w-4xl w-full max-h-[85vh] overflow-y-auto bg-white">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-bold">Safety Plan Discussion</DialogTitle>
+            <DialogTitle className="text-2xl font-bold">Patient Intake</DialogTitle>
           </DialogHeader>
-          <SafetyPlanForm
-            patientId={patientData.patientId}
-            careManagerId={String(careManagerId)}
-            onClose={() => setShowSafetyPlan(false)}
-            onSuccess={handleSafetyPlanSuccess}
-            initialData={latestSafetyPlan}
-            patientName={`${patientData.firstName} ${patientData.lastName}`}
-            mrn={patientData.mrn}
-            clinicName={patientData.clinicName}
-            enrollmentDate={patientData.enrollmentDate}
-            dob={patientData.dob}
-          />
+          {patientData && (
+            <IntakeForm
+              patientId={patientData.patientId.toString()}
+              careManagerId={String(careManagerId)}
+              onClose={() => setShowIntakeForm(false)}
+              onSuccess={handleIntakeFormSuccess}
+              initialData={latestIntakeForm}
+              patientName={`${patientData.firstName} ${patientData.lastName}`}
+              mrn={patientData.mrn}
+              clinicName={patientData.clinicName}
+              enrollmentDate={patientData.enrollmentDate}
+              dob={patientData.dob}
+            />
+          )}
         </DialogContent>
       </Dialog>
 
-      {/* Safety Plan Warning Popup */}
-      <Dialog open={showSafetyPlanWarning} onOpenChange={setShowSafetyPlanWarning}>
+      {/* Intake Form Warning Popup */}
+      <Dialog open={showIntakeFormWarning} onOpenChange={setShowIntakeFormWarning}>
         <DialogContent className="max-w-md w-full bg-white rounded-xl shadow-2xl p-6">
           <DialogHeader>
-            <DialogTitle className="text-xl font-semibold text-red-600">Safety Plan Required</DialogTitle>
+            <DialogTitle className="text-xl font-semibold text-red-600">Patient Intake Required</DialogTitle>
           </DialogHeader>
           <p className="text-gray-700 mb-4">
-            This patient has a Safety Plan flag. Please complete the Safety Plan Discussion form.
+            This patient requires an Intake. Please complete the Patient Intake form.
           </p>
           <div className="flex justify-end space-x-2">
             <Button
               variant="outline"
-              onClick={() => setShowSafetyPlanWarning(false)}
+              onClick={() => setShowIntakeFormWarning(false)}
               className="text-gray-700"
             >
               Dismiss
             </Button>
             <Button
               onClick={() => {
-                setShowSafetyPlanWarning(false);
-                setShowSafetyPlan(true);
+                setShowIntakeFormWarning(false);
+                setShowIntakeForm(true);
               }}
               className="bg-red-500 hover:bg-red-600 text-white"
             >
-              Open Safety Plan Discussion
+              Open Patient Intake Form
             </Button>
           </div>
         </DialogContent>

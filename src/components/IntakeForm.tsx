@@ -77,6 +77,7 @@ interface SubstanceUseState {
   methamphetamine: { current: boolean; past: boolean };
   prescriptionMisuse: { current: boolean; past: boolean };
   cocaine: { current: boolean; past: boolean };
+  [key: string]: { current: boolean; past: boolean };
 }
 
 interface MedicalHistoryState {
@@ -103,7 +104,7 @@ interface SocialSituationState {
   employment: string;
 }
 
-interface SafetyPlanFormProps {
+interface IntakeFormProps {
   patientId: string;
   careManagerId: string;
   onClose: () => void;
@@ -116,7 +117,7 @@ interface SafetyPlanFormProps {
   dob: string;
 }
 
-export default function SafetyPlanForm({
+export default function IntakeForm({
   patientId,
   careManagerId,
   onClose,
@@ -127,7 +128,7 @@ export default function SafetyPlanForm({
   clinicName,
   enrollmentDate,
   dob,
-}: SafetyPlanFormProps) {
+}: IntakeFormProps) {
   const [symptoms, setSymptoms] = useState<SymptomsState>({
     depressedMood: false,
     littlePleasureInterest: false,
@@ -204,9 +205,9 @@ export default function SafetyPlanForm({
   const [currentMedications, setCurrentMedications] = useState<string>("");
   const [pastMedications, setPastMedications] = useState<string>("");
   const [narrative, setNarrative] = useState<string>("");
-  const [safetyPlanDiscussed, setSafetyPlanDiscussed] = useState<boolean>(false);
   const [minutes, setMinutes] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (initialData) {
@@ -223,13 +224,16 @@ export default function SafetyPlanForm({
       setCurrentMedications(initialData.currentMedications || "");
       setPastMedications(initialData.pastMedications || "");
       setNarrative(initialData.narrative || "");
-      setSafetyPlanDiscussed(initialData.safetyPlanDiscussed || false);
       setMinutes(initialData.minutes ? String(initialData.minutes) : "");
     }
   }, [initialData]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
+    // Reset messages
+    setError(null);
+    setSuccessMessage(null);
 
     // Validation
     if (!minutes || parseInt(minutes, 10) <= 0) {
@@ -254,24 +258,35 @@ export default function SafetyPlanForm({
       currentMedications,
       pastMedications,
       narrative,
-      safetyPlanDiscussed,
       minutes: parseInt(minutes, 10),
     };
 
+    console.log("Submitting intake form with data:", data);
+
     try {
-      const response = await fetch("http://localhost:4353/api/safety-plan", {
+      const response = await fetch("http://localhost:4353/api/patient-intake", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
+      
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to submit safety plan discussion");
+        throw new Error(errorData.error || "Failed to submit intake form");
       }
-      setError(null);
-      onSuccess();
+      
+      const responseData = await response.json();
+      console.log("Intake form submission successful:", responseData);
+      
+      // Show success message
+      setSuccessMessage("Patient intake form submitted successfully!");
+      
+      // Wait 1.5 seconds before closing the form to allow the user to see the success message
+      setTimeout(() => {
+        onSuccess();
+      }, 1500);
     } catch (error) {
-      console.error("Error submitting safety plan discussion:", error);
+      console.error("Error submitting intake form:", error);
       setError(error instanceof Error ? error.message : "An unknown error occurred");
     }
   };
@@ -282,10 +297,18 @@ export default function SafetyPlanForm({
     subKey?: string
   ): void => {
     if (subKey) {
-      setSubstanceUse((prev) => ({
-        ...prev,
-        [key]: { ...prev[key], [subKey]: !prev[key][subKey] },
-      }));
+      setSubstanceUse((prev) => {
+        // Use type assertion to handle the indexing
+        const substance = prev[key as keyof SubstanceUseState];
+        
+        return {
+          ...prev,
+          [key]: { 
+            ...substance, 
+            [subKey]: !substance[subKey as keyof typeof substance] 
+          },
+        };
+      });
     } else {
       obj((prev: any) => ({ ...prev, [key]: !prev[key] }));
     }
@@ -344,6 +367,12 @@ export default function SafetyPlanForm({
         </div>
       )}
 
+      {successMessage && (
+        <div className="bg-green-50 border border-green-200 text-green-600 p-4 rounded">
+          {successMessage}
+        </div>
+      )}
+
       <Card>
         <CardHeader className="bg-slate-50">
           <CardTitle className="text-xl text-slate-800">Current Symptoms</CardTitle>
@@ -355,7 +384,11 @@ export default function SafetyPlanForm({
                 <Checkbox
                   id={key}
                   checked={symptoms[key as keyof SymptomsState]}
-                  onCheckedChange={() => handleCheckboxChange(setSymptoms, key)}
+                  onCheckedChange={(checked) => {
+                    if (checked === true || checked === false) {
+                      handleCheckboxChange(setSymptoms, key);
+                    }
+                  }}
                 />
                 <Label htmlFor={key} className="font-medium cursor-pointer">
                   {formatLabel(key)}
@@ -405,7 +438,11 @@ export default function SafetyPlanForm({
                 <Checkbox
                   id={key}
                   checked={pastMentalHealth[key as keyof PastMentalHealthState]}
-                  onCheckedChange={() => handleCheckboxChange(setPastMentalHealth, key)}
+                  onCheckedChange={(checked) => {
+                    if (checked === true || checked === false) {
+                      handleCheckboxChange(setPastMentalHealth, key);
+                    }
+                  }}
                 />
                 <Label htmlFor={key} className="font-medium cursor-pointer">
                   {formatLabel(key)}
@@ -443,7 +480,11 @@ export default function SafetyPlanForm({
                     <Checkbox
                       id={`${key}-current`}
                       checked={substanceUse[key as keyof SubstanceUseState].current}
-                      onCheckedChange={() => handleCheckboxChange(setSubstanceUse, key, "current")}
+                      onCheckedChange={(checked) => {
+                        if (checked === true || checked === false) {
+                          handleCheckboxChange(setSubstanceUse, key, "current");
+                        }
+                      }}
                     />
                     <Label htmlFor={`${key}-current`} className="cursor-pointer">Current</Label>
                   </div>
@@ -451,7 +492,11 @@ export default function SafetyPlanForm({
                     <Checkbox
                       id={`${key}-past`}
                       checked={substanceUse[key as keyof SubstanceUseState].past}
-                      onCheckedChange={() => handleCheckboxChange(setSubstanceUse, key, "past")}
+                      onCheckedChange={(checked) => {
+                        if (checked === true || checked === false) {
+                          handleCheckboxChange(setSubstanceUse, key, "past");
+                        }
+                      }}
                     />
                     <Label htmlFor={`${key}-past`} className="cursor-pointer">Past</Label>
                   </div>
@@ -473,7 +518,11 @@ export default function SafetyPlanForm({
                 <Checkbox
                   id={key}
                   checked={medicalHistory[key as keyof MedicalHistoryState]}
-                  onCheckedChange={() => handleCheckboxChange(setMedicalHistory, key)}
+                  onCheckedChange={(checked) => {
+                    if (checked === true || checked === false) {
+                      handleCheckboxChange(setMedicalHistory, key);
+                    }
+                  }}
                 />
                 <Label htmlFor={key} className="font-medium cursor-pointer">
                   {formatLabel(key)}
@@ -508,7 +557,11 @@ export default function SafetyPlanForm({
                 <Checkbox
                   id={key}
                   checked={familyMentalHealth[key as keyof FamilyMentalHealthState]}
-                  onCheckedChange={() => handleCheckboxChange(setFamilyMentalHealth, key)}
+                  onCheckedChange={(checked) => {
+                    if (checked === true || checked === false) {
+                      handleCheckboxChange(setFamilyMentalHealth, key);
+                    }
+                  }}
                 />
                 <Label htmlFor={key} className="font-medium cursor-pointer">
                   {formatLabel(key)}
@@ -594,17 +647,6 @@ export default function SafetyPlanForm({
             />
           </div>
           
-          <div className="flex items-center space-x-2 bg-yellow-50 p-3 rounded">
-            <Checkbox
-              id="safetyPlanDiscussed"
-              checked={safetyPlanDiscussed}
-              onCheckedChange={setSafetyPlanDiscussed}
-            />
-            <Label htmlFor="safetyPlanDiscussed" className="font-medium cursor-pointer">
-              Safety Plan Discussed
-            </Label>
-          </div>
-          
           <div>
             <Label htmlFor="minutes" className="text-sm font-semibold block mb-1">
               Minutes Spent
@@ -636,9 +678,9 @@ export default function SafetyPlanForm({
           type="submit" 
           className="bg-blue-600 hover:bg-blue-700 text-white px-6"
         >
-          Submit Safety Plan
+          Submit Intake Form
         </Button>
       </div>
     </form>
   );
-}
+} 

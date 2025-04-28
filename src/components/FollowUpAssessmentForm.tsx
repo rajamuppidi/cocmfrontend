@@ -102,6 +102,7 @@ export default function FollowupAssessmentForm({
   const [psychiatricConsultants, setPsychiatricConsultants] = useState<Array<{ id: number, name: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [hasInitialAssessment, setHasInitialAssessment] = useState<boolean>(false);
 
   const { register, handleSubmit, control, watch, setValue, formState: { errors } } = useForm({
     resolver: yupResolver(schema),
@@ -131,6 +132,24 @@ export default function FollowupAssessmentForm({
       setLoading(true);
       setError(null);
       try {
+        // Check if initial assessment exists
+        const treatmentHistoryResponse = await fetch(`http://localhost:4353/api/patients/${patientId}/treatment-history`);
+        if (!treatmentHistoryResponse.ok) {
+          throw new Error(`Failed to fetch treatment history: ${treatmentHistoryResponse.statusText}`);
+        }
+        const treatmentHistory = await treatmentHistoryResponse.json();
+        const initialAssessmentExists = treatmentHistory.some((entry: any) => 
+          entry.assessment_type === "Initial Assessment"
+        );
+        
+        setHasInitialAssessment(initialAssessmentExists);
+        
+        if (!initialAssessmentExists) {
+          setError('Initial assessment is required before proceeding with a follow-up assessment.');
+          setLoading(false);
+          return;
+        }
+        
         // Fetch psychiatric consultants
         const consultantsResponse = await fetch(`http://localhost:4353/api/patients/consultants?clinicId=${effectiveClinicId}`);
         if (!consultantsResponse.ok) {
@@ -145,8 +164,6 @@ export default function FollowupAssessmentForm({
           throw new Error(`Failed to fetch patient data: ${patientResponse.statusText}`);
         }
         const patientData = await patientResponse.json();
-
-        
 
         // Set the default values based on fetched data
         setValue('discussWithConsultant', patientData.flagPsychiatricConsult || false);
@@ -282,7 +299,23 @@ export default function FollowupAssessmentForm({
   }
 
   if (error) {
-    return <div>Error: {error}</div>;
+    return <div className="p-4 text-red-500 bg-red-50 border border-red-200 rounded-md">
+      <h3 className="text-lg font-bold mb-2">Error</h3>
+      <p>{error}</p>
+      <Button onClick={onClose} className="mt-4 bg-red-500 hover:bg-red-600 text-white">
+        Return to Dashboard
+      </Button>
+    </div>;
+  }
+
+  if (!hasInitialAssessment) {
+    return <div className="p-4 text-amber-700 bg-amber-50 border border-amber-200 rounded-md">
+      <h3 className="text-lg font-bold mb-2">Initial Assessment Required</h3>
+      <p>You must complete an initial assessment before you can proceed with a follow-up assessment.</p>
+      <Button onClick={onClose} className="mt-4 bg-amber-500 hover:bg-amber-600 text-white">
+        Return to Dashboard
+      </Button>
+    </div>;
   }
 
   return (
