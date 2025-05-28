@@ -10,6 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import ScoreChart from "./scorechart";
 import { UserContext } from "@/context/UserContext";
 import PatientReminders from "./PatientReminders";
@@ -113,6 +115,15 @@ interface ContactAttempt {
   notes: string;
 }
 
+interface SafetyPlanHistoryEntry {
+  id: number;
+  action: 'created' | 'resolved';
+  action_date: string;
+  resolved_by_name?: string;
+  minutes_spent?: number;
+  notes?: string;
+}
+
 export default function PatientDashboard({ params }: PatientDashboardProps) {
   const { patientId } = params;
   const user = useContext(UserContext); // Get logged-in user from context
@@ -148,6 +159,14 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
   const [attempts, setAttempts] = useState<ContactAttempt[]>([]);
   const [attemptPage, setAttemptPage] = useState(1);
   const itemsPerPage = 5;
+
+  // Add new state variables for safety plan management
+  const [showSafetyPlanDialog, setShowSafetyPlanDialog] = useState(false);
+  const [safetyPlanMinutes, setSafetyPlanMinutes] = useState(0);
+  const [safetyPlanNotes, setSafetyPlanNotes] = useState('');
+  const [safetyPlanHistory, setSafetyPlanHistory] = useState<SafetyPlanHistoryEntry[]>([]);
+  const [safetyPlanCompleting, setSafetyPlanCompleting] = useState(false);
+  const [safetyPlanConfirmed, setSafetyPlanConfirmed] = useState(false);
 
   const fetchTreatmentHistory = async () => {
     if (!patientData) return;
@@ -383,6 +402,63 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
     }
   };
 
+  // Add new functions for safety plan management
+  const fetchSafetyPlanHistory = async () => {
+    if (!patientData) return;
+    try {
+      const response = await fetch(`http://localhost:4353/api/safety-plan-history/${patientData.patientId}`);
+      if (!response.ok) throw new Error("Failed to fetch safety plan history");
+      const data = await response.json();
+      setSafetyPlanHistory(data.history);
+    } catch (error) {
+      console.error("Error fetching safety plan history:", error);
+    }
+  };
+
+  const handleCompleteSafetyPlan = async () => {
+    if (!patientData || !user?.id) return;
+    
+    setSafetyPlanCompleting(true);
+    
+    try {
+      const response = await fetch('http://localhost:4353/api/complete-safety-plan', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          patientId: patientData.patientId,
+          userId: user.id,
+          minutes: safetyPlanMinutes,
+          notes: safetyPlanNotes
+        })
+      });
+      
+      if (!response.ok) throw new Error("Failed to complete safety plan");
+      
+      // Update local state
+      const updatedFlags = flags.filter(flag => flag !== "Safety Plan");
+      setFlags(updatedFlags);
+      
+      // Fetch updated safety plan history
+      fetchSafetyPlanHistory();
+      
+      // Close dialog
+      setShowSafetyPlanDialog(false);
+      setSafetyPlanMinutes(0);
+      setSafetyPlanNotes('');
+      setSafetyPlanConfirmed(false);
+      
+      // Refetch patient flags to ensure UI is in sync with backend
+      fetchPatientFlags(patientData.patientId.toString());
+    } catch (error) {
+      console.error("Error completing safety plan:", error);
+      alert("Failed to complete safety plan. Please try again.");
+    } finally {
+      setSafetyPlanCompleting(false);
+    }
+  };
+
   useEffect(() => {
     if (patientId) fetchPatientData(patientId);
     else {
@@ -400,6 +476,7 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
       fetchTreatmentHistory();
       fetchLatestIntakeForm();
       fetchContactAttempts();
+      fetchSafetyPlanHistory();
     }
   }, [patientData]);
 
@@ -547,9 +624,98 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
               )}
             </div>
           </div>
+          
           <div className="bg-white rounded-lg shadow-md p-4 mb-4">
             <PatientReminders patientId={patientData.patientId} />
           </div>
+          
+          {/* Safety Plan Management - Show with different UI based on status */}
+          <div className="bg-white rounded-lg shadow-md p-4 mb-4 overflow-hidden">
+            <h2 className="text-lg font-semibold mb-2 flex items-center">
+              <span className="mr-2">🔔</span> Safety Plan
+              {flags.includes("Safety Plan") && (
+                <span className="ml-auto px-2 py-1 text-xs font-semibold bg-red-100 text-red-800 rounded-full">
+                  Active
+                </span>
+              )}
+            </h2>
+            
+            {flags.includes("Safety Plan") ? (
+              <div className="mt-3">
+                <div className="bg-red-50 p-3 rounded-md border border-red-200 mb-3">
+                  <p className="text-sm text-red-800 font-medium mb-1">
+                    This patient has an active safety plan flag.
+                  </p>
+                  <p className="text-xs text-red-700">
+                    Please discuss the safety plan with the patient and document the details.
+                  </p>
+                </div>
+                
+                {user?.role === "BHCM" && (
+                  <Button 
+                    className="w-full bg-red-500 hover:bg-red-600 text-white"
+                    onClick={() => setShowSafetyPlanDialog(true)}
+                  >
+                    Complete Safety Plan
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="mt-1">
+                <p className="text-sm text-gray-600">
+                  No active safety plan for this patient.
+                </p>
+              </div>
+            )}
+            
+            {/* Safety Plan History - Integrated within the same card */}
+            {safetyPlanHistory.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <h3 className="text-sm font-semibold mb-2 text-gray-700">History</h3>
+                <div className="text-sm max-h-40 overflow-y-auto pr-1">
+                  {safetyPlanHistory.map((entry) => (
+                    <div key={entry.id} className="py-2 border-b border-gray-100 last:border-0">
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center">
+                          {entry.action === 'created' ? (
+                            <span className="w-2 h-2 rounded-full bg-red-500 mr-2"></span>
+                          ) : (
+                            <span className="w-2 h-2 rounded-full bg-green-500 mr-2"></span>
+                          )}
+                          <span className="font-medium text-gray-800">
+                            {entry.action === 'created' ? 'Created' : 'Resolved'}
+                          </span>
+                        </div>
+                        <span className="text-gray-500 text-xs">
+                          {entry.action_date}
+                        </span>
+                      </div>
+                      {entry.action === 'resolved' && (
+                        <div className="ml-4 mt-1">
+                          {entry.resolved_by_name && (
+                            <div className="text-xs text-gray-500">
+                              By: {entry.resolved_by_name}
+                            </div>
+                          )}
+                          {entry.minutes_spent !== undefined && entry.minutes_spent > 0 && (
+                            <div className="text-xs text-gray-500">
+                              Minutes: {entry.minutes_spent}
+                            </div>
+                          )}
+                          {entry.notes && (
+                            <div className="text-xs text-gray-600 mt-1 bg-gray-50 p-1 rounded italic">
+                              &ldquo;{entry.notes}&rdquo;
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          
           <div className="bg-white rounded-lg shadow-md p-4 mb-4">
             <h2 className="text-lg font-semibold mb-2">Last Contact</h2>
             {lastContactInfo ? (
@@ -573,6 +739,7 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
               <p>No recent contact information available.</p>
             )}
           </div>
+          
           <div className="bg-white rounded-lg shadow-md p-4 mb-4">
             <h2 className="text-lg font-semibold mb-2">Contact Attempt History</h2>
             <p className="text-sm font-medium text-gray-700">
@@ -622,6 +789,7 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
               <p>No contact attempts recorded.</p>
             )}
           </div>
+          
           <div className="bg-white rounded-lg shadow-md p-4">
             <h2 className="text-lg font-semibold mb-2">Flags</h2>
             <p>
@@ -1102,6 +1270,84 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
             >
               Open Patient Intake Form
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Safety Plan Resolution Dialog */}
+      <Dialog open={showSafetyPlanDialog} onOpenChange={(open) => {
+        setShowSafetyPlanDialog(open);
+        if (!open) {
+          // Reset form when dialog is closed
+          setSafetyPlanMinutes(0);
+          setSafetyPlanNotes('');
+          setSafetyPlanConfirmed(false);
+        }
+      }}>
+        <DialogContent className="max-w-md w-full bg-white rounded-xl shadow-2xl p-6">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold text-red-600">Complete Safety Plan</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <p className="text-gray-700 mb-2">
+              Please confirm that you have discussed the safety plan with the patient.
+            </p>
+            
+            <div className="space-y-2">
+              <Label htmlFor="minutes" className="text-sm font-medium">
+                Minutes spent discussing safety plan
+              </Label>
+              <Input 
+                id="minutes" 
+                type="number" 
+                min="0"
+                value={safetyPlanMinutes}
+                onChange={(e) => setSafetyPlanMinutes(parseInt(e.target.value) || 0)}
+                className="w-full"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="notes" className="text-sm font-medium">
+                Notes (optional)
+              </Label>
+              <Textarea
+                id="notes"
+                placeholder="Enter any notes about the safety plan discussion"
+                value={safetyPlanNotes}
+                onChange={(e) => setSafetyPlanNotes(e.target.value)}
+                className="min-h-[100px] w-full"
+              />
+            </div>
+            
+            <div className="flex items-center space-x-2 mt-4">
+              <Checkbox 
+                id="confirm" 
+                checked={safetyPlanConfirmed}
+                onCheckedChange={(checked) => setSafetyPlanConfirmed(checked === true)}
+              />
+              <Label htmlFor="confirm" className="text-sm font-medium">
+                I confirm that I have discussed the safety plan with the patient
+              </Label>
+            </div>
+            
+            <div className="flex justify-end space-x-2 mt-4">
+              <Button
+                variant="outline"
+                onClick={() => setShowSafetyPlanDialog(false)}
+                className="text-gray-700"
+                disabled={safetyPlanCompleting}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCompleteSafetyPlan}
+                className="bg-red-500 hover:bg-red-600 text-white"
+                disabled={safetyPlanCompleting || !safetyPlanConfirmed || safetyPlanMinutes <= 0}
+              >
+                {safetyPlanCompleting ? "Processing..." : "Complete Safety Plan"}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
