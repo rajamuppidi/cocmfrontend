@@ -8,7 +8,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { format, parseISO } from "date-fns";
 import { 
   ChevronDown, ChevronRight, ChevronLeft, Folder, FileText, Download, X, Search,
-  FileIcon, FolderIcon, Clock, Calendar, Settings, FilePlus, User, Eye, RefreshCw
+  FileIcon, FolderIcon, Clock, Calendar, Settings, FilePlus, User, Eye, RefreshCw,
+  FileDigit, Download as DownloadIcon
 } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
 
@@ -138,6 +139,42 @@ export default function PatientDocuments({ patientId, open, onOpenChange }: Pati
       window.URL.revokeObjectURL(url);
     } catch (error: any) {
       setDownloadError(`Failed to download PDF: ${error.message}`);
+    }
+  };
+  
+  const handleExportMasterDocument = async () => {
+    setDownloadError(null);
+    try {
+      const endpoint = `http://localhost:4353/api/patients/${patientId}/master-document`;
+      
+      // Show loading state
+      const loadingToast = document.getElementById('loading-toast');
+      if (loadingToast) loadingToast.style.display = 'flex';
+      
+      const response = await fetch(endpoint, {
+        method: "GET",
+        credentials: "include",
+        headers: { "Accept": "application/pdf" },
+      });
+      
+      // Hide loading state
+      if (loadingToast) loadingToast.style.display = 'none';
+      
+      if (!response.ok) throw new Error(`Failed to export master document: ${await response.text()}`);
+      
+      const filename = response.headers.get("Content-Disposition")?.match(/filename="(.+)"/)?.[1] || `Master_Document_${patientId}.pdf`;
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error: any) {
+      console.error('Error exporting master document:', error);
+      setDownloadError(`Failed to download master document: ${error.message}`);
     }
   };
 
@@ -360,6 +397,14 @@ export default function PatientDocuments({ patientId, open, onOpenChange }: Pati
               </div>
               
               <div className="flex items-center space-x-2">
+                <button
+                  onClick={handleExportMasterDocument}
+                  className="p-1.5 rounded-md text-blue-500 hover:bg-blue-50 flex items-center"
+                  title="Export Master Treatment History Document"
+                >
+                  <FileDigit className="w-4 h-4 mr-1" />
+                  <span className="text-xs font-medium">Master Document</span>
+                </button>
                 <button
                   onClick={() => fetchPatientDocuments()}
                   className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100"
@@ -603,6 +648,16 @@ export default function PatientDocuments({ patientId, open, onOpenChange }: Pati
           </DialogContent>
         </Dialog>
       </DialogContent>
+      
+      {/* Loading toast for master document generation */}
+      <div 
+        id="loading-toast" 
+        className="fixed bottom-4 right-4 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg flex items-center space-x-2 z-50" 
+        style={{ display: 'none' }}
+      >
+        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+        <span>Generating master document...</span>
+      </div>
     </Dialog>
   );
 }

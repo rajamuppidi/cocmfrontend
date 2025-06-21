@@ -6,6 +6,8 @@ import FollowUpAssessmentForm from "./FollowUpAssessmentForm";
 import ContactAttemptForm from "./ContactAttemptForm";
 import PatientDocuments from "./PatientDocuments";
 import IntakeForm from "./IntakeForm";
+import PsychConsultForm from "./PsychConsultForm";
+import PsychConsultHistory from "./PsychConsultHistory";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -15,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import ScoreChart from "./scorechart";
 import { UserContext } from "@/context/UserContext";
 import PatientReminders from "./PatientReminders";
-import { FaFolder } from "react-icons/fa";
+import { FaFolder, FaFileAlt } from "react-icons/fa";
 import {
   Table,
   TableBody,
@@ -136,6 +138,9 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
   const [showContactAttempt, setShowContactAttempt] = useState(false);
   const [showDocuments, setShowDocuments] = useState(false);
   const [showIntakeForm, setShowIntakeForm] = useState(false);
+  const [showPsychConsultForm, setShowPsychConsultForm] = useState(false);
+  const [psychConsultRefresh, setPsychConsultRefresh] = useState(0);
+  const [generatingMasterDocument, setGeneratingMasterDocument] = useState(false);
   const [showIntakeFormWarning, setShowIntakeFormWarning] = useState(false);
   const [expandedPHQ9, setExpandedPHQ9] = useState(false);
   const [expandedGAD7, setExpandedGAD7] = useState(false);
@@ -336,6 +341,37 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
       fetchContactAttempts(); // Refresh contact attempts
     }
   };
+  
+  const handleGenerateMasterDocument = async () => {
+    if (!patientData) return;
+    
+    setGeneratingMasterDocument(true);
+    try {
+      const response = await fetch(`http://localhost:4353/api/patients/${patientData.patientId}/master-document`, {
+        method: "GET",
+        credentials: "include",
+        headers: { "Accept": "application/pdf" },
+      });
+      
+      if (!response.ok) throw new Error(`Failed to export master document: ${await response.text()}`);
+      
+      const filename = response.headers.get("Content-Disposition")?.match(/filename="(.+)"/)?.[1] || `Master_Document_${patientData.patientId}.pdf`;
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error: any) {
+      console.error('Error exporting master document:', error);
+      alert(`Failed to generate master document: ${error.message}`);
+    } finally {
+      setGeneratingMasterDocument(false);
+    }
+  };
 
   const handleIntakeFormSuccess = () => {
     setShowIntakeForm(false);
@@ -400,6 +436,14 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
           });
       }, 1500); // Increase timeout to ensure data is refreshed
     }
+  };
+
+  const handlePsychConsultSuccess = () => {
+    setShowPsychConsultForm(false);
+    setPsychConsultRefresh(prev => prev + 1);
+    fetchPatientData(patientId);
+    fetchPatientFlags(patientId); // Explicitly refresh flags to remove "Psychiatric Consult" flag
+    fetchTreatmentHistory();
   };
 
   // Add new functions for safety plan management
@@ -837,11 +881,33 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
             >
               Record Contact Attempt
             </Button>
+            {user?.role === "Psychiatric Consultant" && (
+              <Button
+                onClick={() => setShowPsychConsultForm(true)}
+                className="bg-purple-500 hover:bg-purple-600 text-white"
+              >
+                Document Psychiatric Consultation
+              </Button>
+            )}
             <Button
               onClick={() => setShowDocuments(true)}
               className="bg-blue-500 hover:bg-blue-600 text-white flex items-center"
             >
               <FaFolder className="mr-2" /> View Patient Documents
+            </Button>
+            <Button
+              onClick={handleGenerateMasterDocument}
+              className="bg-indigo-500 hover:bg-indigo-600 text-white flex items-center"
+              disabled={generatingMasterDocument}
+            >
+              <FaFileAlt className="mr-2" />
+              {generatingMasterDocument ? (
+                <>
+                  <span className="animate-spin mr-2">⏳</span> Generating...
+                </>
+              ) : (
+                "Treatment History Master Record"
+              )}
             </Button>
           </div>
 
@@ -1139,6 +1205,16 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
               <p>No patient intake recorded.</p>
             )}
           </div>
+
+          {/* Psychiatric Consultation History */}
+          {(user?.role === "Psychiatric Consultant" || flags.includes("Psychiatric Consult")) && (
+            <div className="mb-6">
+              <PsychConsultHistory 
+                patientId={patientData.patientId} 
+                refreshTrigger={psychConsultRefresh}
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -1349,6 +1425,22 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Psychiatric Consultation Dialog */}
+      <Dialog open={showPsychConsultForm} onOpenChange={setShowPsychConsultForm}>
+        <DialogContent className="max-w-5xl w-full max-h-[90vh] overflow-y-auto bg-white">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-bold">Psychiatric Consultation Notes</DialogTitle>
+          </DialogHeader>
+          {patientData && (
+            <PsychConsultForm
+              patientId={patientData.patientId}
+              onSuccess={handlePsychConsultSuccess}
+              onCancel={() => setShowPsychConsultForm(false)}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </div>

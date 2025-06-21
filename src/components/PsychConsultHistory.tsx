@@ -3,73 +3,128 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
-import { 
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 
-interface PsychConsult {
+interface PsychConsultation {
   id: number;
   consultDate: string;
-  consultBy: string;
-  consultByRole: string;
-  minutes: number;
+  assessmentType: 'Initial' | 'Follow-up';
+  summary: string;
   recommendations: string;
-  treatmentPlan: string | null;
-  medications: string | null;
-  followUpNeeded: boolean;
-  nextFollowUpDate: string | null;
+  minutes: number;
+  companyName: string;
+  consultantName: string;
+  consultantPhone: string;
+  treatmentPlan?: string;
+  medications?: string;
+  followUpNeeded?: boolean;
+  nextFollowUpDate?: string;
 }
 
 interface PsychConsultHistoryProps {
   patientId: number;
-  canAddConsult?: boolean;
-  onAddConsult?: () => void;
+  refreshTrigger?: number;
 }
 
-const PsychConsultHistory: React.FC<PsychConsultHistoryProps> = ({ 
-  patientId, 
-  canAddConsult = false,
-  onAddConsult
-}) => {
-  const [consultations, setConsultations] = useState<PsychConsult[]>([]);
+const PsychConsultHistory: React.FC<PsychConsultHistoryProps> = ({ patientId, refreshTrigger }) => {
+  const [consultations, setConsultations] = useState<PsychConsultation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  const [exporting, setExporting] = useState<number | null>(null);
 
   useEffect(() => {
-    fetchConsultHistory();
-  }, [patientId]);
+    fetchConsultations();
+  }, [patientId, refreshTrigger]);
 
-  const fetchConsultHistory = async () => {
+  const fetchConsultations = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:4353/api/psych/consult-history/${patientId}`);
-      
+      setError(null);
+      const response = await fetch(`http://localhost:4353/api/psych/consultations/${patientId}`);
       if (!response.ok) {
-        throw new Error('Failed to fetch consultation history');
+        throw new Error('Failed to fetch consultations');
       }
-      
       const data = await response.json();
-      setConsultations(data);
+      console.log('Fetched consultations data:', data);
+      setConsultations(Array.isArray(data) ? data : []);
+      setLoading(false);
     } catch (err) {
-      console.error('Error fetching psychiatric consultation history:', err);
+      console.error('Error fetching consultations:', err);
       setError('Failed to load consultation history');
-    } finally {
       setLoading(false);
     }
+  };
+
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return 'Invalid Date';
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        return 'Invalid Date';
+      }
+      return format(date, 'MMMM dd, yyyy');
+    } catch (error) {
+      console.error('Error formatting date:', dateString, error);
+      return 'Invalid Date';
+    }
+  };
+
+  const toggleExpanded = (id: number) => {
+    const newExpanded = new Set(expandedIds);
+    if (newExpanded.has(id)) {
+      newExpanded.delete(id);
+    } else {
+      newExpanded.add(id);
+    }
+    setExpandedIds(newExpanded);
+  };
+
+  const handleExportPDF = async (consultationId: number) => {
+    try {
+      setExporting(consultationId);
+      const response = await fetch(
+        `http://localhost:4353/api/patients/${patientId}/psych-consultations/${consultationId}/export`,
+        {
+          method: 'GET',
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to export consultation');
+      }
+
+      // Create blob and download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = `Psychiatric_Consultation_${format(new Date(), 'yyyy-MM-dd')}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error('Error exporting consultation:', err);
+      alert('Failed to export consultation. Please try again.');
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  const truncateText = (text: string, maxLength: number = 150) => {
+    if (!text) return '';
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + '...';
   };
 
   if (loading) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle>Psychiatric Consultation History</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-6">Loading consultation history...</div>
+        <CardContent className="p-6">
+          <div className="text-center">Loading consultation history...</div>
         </CardContent>
       </Card>
     );
@@ -78,11 +133,8 @@ const PsychConsultHistory: React.FC<PsychConsultHistoryProps> = ({
   if (error) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle>Psychiatric Consultation History</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-6 text-red-500">{error}</div>
+        <CardContent className="p-6">
+          <div className="text-center text-red-500">{error}</div>
         </CardContent>
       </Card>
     );
@@ -90,78 +142,109 @@ const PsychConsultHistory: React.FC<PsychConsultHistoryProps> = ({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>Psychiatric Consultation History</CardTitle>
-        {canAddConsult && (
-          <Button 
-            onClick={onAddConsult}
-            className="bg-purple-600 hover:bg-purple-700"
-          >
-            Add Consultation
-          </Button>
-        )}
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between">
+          <span>Psychiatric Consultation History</span>
+          <Badge variant="secondary" className="ml-2">
+            {consultations.length} consultation{consultations.length !== 1 ? 's' : ''}
+          </Badge>
+        </CardTitle>
       </CardHeader>
       <CardContent>
-        {consultations.length > 0 ? (
-          <Accordion type="single" collapsible>
-            {consultations.map((consult, index) => (
-              <AccordionItem key={consult.id} value={`consult-${consult.id}`}>
-                <AccordionTrigger className="hover:bg-gray-50 px-4 py-2">
-                  <div className="flex justify-between w-full items-center">
-                    <div className="font-medium">
-                      Consultation on {format(new Date(consult.consultDate), 'MMMM d, yyyy')}
-                    </div>
-                    <div className="text-sm text-gray-500 mr-4">
-                      {consult.consultBy} • {consult.minutes} min
-                    </div>
-                  </div>
-                </AccordionTrigger>
-                <AccordionContent className="px-4 py-2">
-                  <div className="space-y-4">
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-500">Consultant</h4>
-                      <p>{consult.consultBy} ({consult.consultByRole})</p>
-                    </div>
-                    
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-500">Clinical Recommendations</h4>
-                      <p className="whitespace-pre-line">{consult.recommendations}</p>
-                    </div>
-                    
-                    {consult.treatmentPlan && (
-                      <div>
-                        <h4 className="text-sm font-medium text-gray-500">Treatment Plan</h4>
-                        <p className="whitespace-pre-line">{consult.treatmentPlan}</p>
-                      </div>
-                    )}
-                    
-                    {consult.medications && (
-                      <div>
-                        <h4 className="text-sm font-medium text-gray-500">Medication Recommendations</h4>
-                        <p className="whitespace-pre-line">{consult.medications}</p>
-                      </div>
-                    )}
-                    
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-500">Follow-up</h4>
-                      {consult.followUpNeeded ? (
-                        <p>
-                          Follow-up needed. Next appointment: {consult.nextFollowUpDate 
-                            ? format(new Date(consult.nextFollowUpDate), 'MMMM d, yyyy') 
-                            : 'Not specified'}
-                        </p>
-                      ) : (
-                        <p>No follow-up needed at this time.</p>
-                      )}
-                    </div>
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-            ))}
-          </Accordion>
-        ) : (
-          <div className="text-center py-6 text-gray-500">
+        {consultations.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
             No psychiatric consultations recorded for this patient.
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {consultations.map((consultation) => {
+              if (!consultation || typeof consultation !== 'object') {
+                console.error('Invalid consultation object:', consultation);
+                return null;
+              }
+              
+              return (
+                <div key={consultation.id} className="border rounded-lg p-4 bg-gray-50">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <h4 className="font-semibold text-lg">
+                          {formatDate(consultation.consultDate)}
+                        </h4>
+                        <Badge 
+                          variant={consultation.assessmentType === 'Initial' ? 'default' : 'secondary'}
+                          className="text-xs"
+                        >
+                          {consultation.assessmentType || 'Unknown'} Assessment
+                        </Badge>
+                      </div>
+                      <div className="text-sm text-gray-600 mb-2">
+                        <p><strong>Consultant:</strong> {consultation.consultantName || 'Unknown'}</p>
+                        <p><strong>Company:</strong> {consultation.companyName || 'Not specified'}</p>
+                        <p><strong>Duration:</strong> {consultation.minutes || 0} minutes</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => toggleExpanded(consultation.id)}
+                      >
+                        {expandedIds.has(consultation.id) ? 'Collapse' : 'Expand'}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleExportPDF(consultation.id)}
+                        disabled={exporting === consultation.id}
+                        className="text-purple-600 border-purple-600 hover:bg-purple-50"
+                      >
+                        {exporting === consultation.id ? 'Exporting...' : 'Export PDF'}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <h5 className="font-medium text-gray-800 mb-1">Summary:</h5>
+                      <p className="text-gray-700 text-sm leading-relaxed">
+                        {expandedIds.has(consultation.id) 
+                          ? (consultation.summary || 'No summary provided')
+                          : truncateText(consultation.summary)
+                        }
+                      </p>
+                    </div>
+
+                    <div>
+                      <h5 className="font-medium text-gray-800 mb-1">Recommendations:</h5>
+                      <p className="text-gray-700 text-sm leading-relaxed">
+                        {expandedIds.has(consultation.id) 
+                          ? (consultation.recommendations || 'No recommendations provided')
+                          : truncateText(consultation.recommendations)
+                        }
+                      </p>
+                    </div>
+
+                    {!expandedIds.has(consultation.id) && 
+                      ((consultation.summary && consultation.summary.length > 150) || 
+                       (consultation.recommendations && consultation.recommendations.length > 150)) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => toggleExpanded(consultation.id)}
+                        className="text-purple-600 hover:text-purple-800 p-0 h-auto"
+                      >
+                        Click to read more...
+                      </Button>
+                    )}
+                  </div>
+
+                  <div className="mt-3 pt-3 border-t border-gray-200 text-xs text-gray-500">
+                    Consultation Date: {formatDate(consultation.consultDate)}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </CardContent>

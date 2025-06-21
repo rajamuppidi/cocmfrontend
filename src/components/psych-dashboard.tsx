@@ -92,6 +92,7 @@ const PsychDashboard: React.FC = () => {
       });
       setLoading(false);
     } catch (err) {
+      console.error('Error fetching psychiatric consultant data:', err);
       setError('Error fetching psychiatric consultant data');
       setLoading(false);
     }
