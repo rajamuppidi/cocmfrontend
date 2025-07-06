@@ -7,6 +7,7 @@ import { jwtDecode } from 'jwt-decode';
 import dynamic from 'next/dynamic';
 import ActivePatientsPage from '@/app/active-patients/page';
 import EnrolledPatientsPage from '@/app/enrolled-patients/page';
+import InactivePatientsPage from '@/app/inactive/page';
 import { useDispatch, useSelector } from 'react-redux';
 import { setClinic, initializeClinic } from '@/lib/clinicSlice';
 import { RootState, AppDispatch } from '@/lib/store';
@@ -31,6 +32,7 @@ const Users = dynamic(() => import('@/components/Users'));
 const Dashboard = dynamic(() => import('@/components/dashboard'));
 const PsychDashboard = dynamic(() => import('@/components/psych-dashboard'));
 const PsychPatients = dynamic(() => import('@/components/psych-patients'));
+
 
 const ClientRootLayout = ({ children }: ClientRootLayoutProps) => {
   const router = useRouter();
@@ -74,13 +76,13 @@ const ClientRootLayout = ({ children }: ClientRootLayoutProps) => {
               router.push('/admin');
             } else if (data.role === 'Psychiatric Consultant') {
               const allowedPsychPaths = ['/psych-dashboard', '/psych-patients', '/patients'];
-              if (!allowedPsychPaths.some(path => pathname.startsWith(path))) {
+              if (pathname && !allowedPsychPaths.some(path => pathname.startsWith(path))) {
                 router.push('/psych-dashboard');
               }
             } else if (data.role !== 'Admin' && data.role !== 'Psychiatric Consultant') {
-              const allowedPaths = ['/dashboard', '/active-patients', '/enrolled-patients', '/patients'];
-              if (!allowedPaths.some(path => pathname.startsWith(path))) {
-              router.push('/dashboard');
+              const allowedPaths = ['/dashboard', '/active-patients', '/enrolled-patients', '/inactive', '/patients'];
+              if (pathname && !allowedPaths.some(path => pathname.startsWith(path))) {
+                router.push('/dashboard');
               }
             }
 
@@ -109,7 +111,7 @@ const ClientRootLayout = ({ children }: ClientRootLayoutProps) => {
 
   // Handle tab for admin users
   useEffect(() => {
-    if (user?.role === 'Admin') {
+    if (user?.role === 'Admin' && searchParams) {
       const tab = searchParams.get('tab') || 'clinics';
       console.log("Tab from URL:", tab);
       setActiveTab(tab);
@@ -120,7 +122,7 @@ const ClientRootLayout = ({ children }: ClientRootLayoutProps) => {
   useEffect(() => {
     console.log("Current activeTab:", activeTab);
     console.log("Current pathname:", pathname);
-    console.log("URL parameters:", Object.fromEntries(searchParams.entries()));
+    console.log("URL parameters:", searchParams ? Object.fromEntries(searchParams.entries()) : {});
   }, [activeTab, pathname, searchParams]);
 
   if (loading) {
@@ -145,8 +147,25 @@ const ClientRootLayout = ({ children }: ClientRootLayoutProps) => {
         return <PsychPatients />;
       }
     } else {
-      if (pathname === '/dashboard') {
-        return <Dashboard />;
+      console.log("Current pathname:", pathname);
+      
+      // Direct route handling for specific paths
+      if (pathname) {
+        switch (pathname) {
+          case '/dashboard':
+            return <Dashboard />;
+          case '/active-patients':
+            return <ActivePatientsPage />;
+          case '/enrolled-patients':
+            return <EnrolledPatientsPage />;
+          case '/inactive':
+            return <InactivePatientsPage />;
+          default:
+            // For patient detail pages or other routes
+            if (pathname.startsWith('/patients/')) {
+              return children;
+            }
+        }
       }
     }
     

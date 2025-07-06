@@ -214,7 +214,7 @@ const PsychConsultHistory: React.FC<PsychConsultHistoryProps> = ({ patientId, re
                         }
                       </p>
                     </div>
-
+                    
                     <div>
                       <h5 className="font-medium text-gray-800 mb-1">Recommendations:</h5>
                       <p className="text-gray-700 text-sm leading-relaxed">
@@ -224,7 +224,7 @@ const PsychConsultHistory: React.FC<PsychConsultHistoryProps> = ({ patientId, re
                         }
                       </p>
                     </div>
-
+                    
                     {!expandedIds.has(consultation.id) && 
                       ((consultation.summary && consultation.summary.length > 150) || 
                        (consultation.recommendations && consultation.recommendations.length > 150)) && (
@@ -237,7 +237,7 @@ const PsychConsultHistory: React.FC<PsychConsultHistoryProps> = ({ patientId, re
                         Click to read more...
                       </Button>
                     )}
-                  </div>
+                      </div>
 
                   <div className="mt-3 pt-3 border-t border-gray-200 text-xs text-gray-500">
                     Consultation Date: {formatDate(consultation.consultDate)}

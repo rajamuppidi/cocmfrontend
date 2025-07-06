@@ -170,6 +170,30 @@ export default function ActivePatientsComponent({ selectedClinic }: ActivePatien
 
   const paginatedPatients = sortedPatients.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
 
+  // Helper function to get status display text
+  const getStatusDisplay = (status: string) => {
+    switch (status) {
+      case 'A': return 'Active';
+      case 'R': return 'Relapse Prevention Plan';
+      case 'T': return 'Transferred';
+      case 'E': return 'Enrolled';
+      case 'D': return 'Inactive';
+      default: return status;
+    }
+  };
+
+  // Update the table to show the status display text
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'A': return 'bg-green-500';
+      case 'R': return 'bg-yellow-500';
+      case 'T': return 'bg-blue-500';
+      case 'E': return 'bg-purple-500';
+      case 'D': return 'bg-gray-500';
+      default: return '';
+    }
+  };
+
   return (
     <div className="w-full min-h-screen bg-white">
       <Card className="w-full">
@@ -222,7 +246,12 @@ export default function ActivePatientsComponent({ selectedClinic }: ActivePatien
                                 </span>
                               ) : null}
                             </Button>
-                            <Info className="h-4 w-4 ml-1" title={headCell.info} />
+                            <div className="h-4 w-4 ml-1 relative group">
+                              <Info className="h-4 w-4" />
+                              <div className="absolute left-0 top-6 bg-black text-white text-xs rounded p-2 w-48 invisible group-hover:visible z-10">
+                                {headCell.info}
+                              </div>
+                            </div>
                           </div>
                         </TableHead>
                       ))}
@@ -240,7 +269,12 @@ export default function ActivePatientsComponent({ selectedClinic }: ActivePatien
                         <TableCell>{patient.mrn}</TableCell>
                         <TableCell>{patient.firstName}</TableCell>
                         <TableCell>{patient.lastName}</TableCell>
-                        <TableCell>{patient.status}</TableCell>
+                        <TableCell className="py-2">
+                          <div className="flex items-center">
+                            <span className={`w-2 h-2 rounded-full mr-2 ${getStatusColor(patient.status)}`}></span>
+                            {getStatusDisplay(patient.status)}
+                          </div>
+                        </TableCell>
                         <TableCell>{patient.phq9First ?? 'N/A'}</TableCell>
                         <TableCell>{patient.phq9Last ?? 'N/A'}</TableCell>
                         <TableCell>{patient.gad7First ?? 'N/A'}</TableCell>

@@ -16,6 +16,7 @@ interface PsychConsultFormProps {
   patientId: number;
   onSuccess: () => void;
   onCancel: () => void;
+  isMinimized?: boolean;
 }
 
 interface Patient {
@@ -26,7 +27,7 @@ interface Patient {
   mrn: string;
 }
 
-const PsychConsultForm: React.FC<PsychConsultFormProps> = ({ patientId, onSuccess, onCancel }) => {
+const PsychConsultForm: React.FC<PsychConsultFormProps> = ({ patientId, onSuccess, onCancel, isMinimized = false }) => {
   const user = useContext(UserContext);
   const selectedClinic = useSelector((state: RootState) => state.clinic.selectedClinic);
   
@@ -113,293 +114,225 @@ const PsychConsultForm: React.FC<PsychConsultFormProps> = ({ patientId, onSucces
 
   if (!patient) {
     return (
-      <div className="w-full max-w-5xl mx-auto">
-        <Card className="shadow-lg border-0">
-          <CardContent className="p-8">
-            <div className="text-center text-gray-600">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-4"></div>
-              Loading patient information...
-            </div>
-          </CardContent>
-        </Card>
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center text-gray-600">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-600 mx-auto mb-2"></div>
+          <span className="text-sm">Loading patient information...</span>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="w-full max-w-5xl mx-auto">
-      <Card className="shadow-2xl border-0 overflow-hidden">
-        {/* Professional Header */}
-        <CardHeader className="bg-blue-700 text-white p-0">
-          <div className="px-8 py-6">
-            <CardTitle className="text-3xl font-bold text-center mb-2">
-              Psychiatric Consulting Notes
-            </CardTitle>
-            <div className="text-center text-blue-100 text-sm">
-              Confidential Medical Documentation
+    <div className="h-full flex flex-col">
+      <div className="flex-1 overflow-y-auto">
+        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">
+              <p>{error}</p>
+            </div>
+          )}
+          
+          {/* Consultation Information */}
+          <div className="bg-gray-50 p-4 rounded-lg">
+            <h3 className="font-semibold text-gray-800 mb-3 flex items-center">
+              <div className="w-2 h-4 bg-purple-600 rounded-full mr-2"></div>
+              Consultation Info
+            </h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="companyName" className="text-xs font-medium text-gray-700">
+                  Company/Organization *
+                </Label>
+                <Input
+                  id="companyName"
+                  type="text"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  placeholder="Enter company name"
+                  required
+                  className="h-8 text-sm"
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="consultDate" className="text-xs font-medium text-gray-700">
+                  Consultation Date *
+                </Label>
+                <Input
+                  id="consultDate"
+                  type="date"
+                  value={consultDate}
+                  onChange={(e) => setConsultDate(e.target.value)}
+                  required
+                  className="h-8 text-sm"
+                />
+              </div>
+
+              <div>
+                <Label className="text-xs font-medium text-gray-700">Consultant</Label>
+                <Input 
+                  value={user?.name || ''} 
+                  disabled 
+                  className="h-8 bg-gray-100 text-gray-600 text-sm"
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="minutesSpent" className="text-xs font-medium text-gray-700">
+                  Minutes Spent *
+                </Label>
+                <Input
+                  id="minutesSpent"
+                  type="number"
+                  min="1"
+                  value={minutesSpent}
+                  onChange={(e) => setMinutesSpent(e.target.value)}
+                  required
+                  className="h-8 text-sm"
+                />
+              </div>
             </div>
           </div>
-        </CardHeader>
 
-        <CardContent className="p-0">
-          <form onSubmit={handleSubmit} className="space-y-0">
-            {error && (
-              <div className="mx-8 mt-6 p-4 bg-red-50 border-l-4 border-red-400 text-red-700 rounded-r-md">
-                <div className="flex">
-                  <div className="ml-3">
-                    <p className="text-sm font-medium">{error}</p>
-                  </div>
-                </div>
+          {/* Patient Information */}
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <h3 className="font-semibold text-gray-800 mb-3 flex items-center">
+              <div className="w-2 h-4 bg-blue-600 rounded-full mr-2"></div>
+              Patient Info
+            </h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs font-medium text-gray-700">Patient Name</Label>
+                <Input 
+                  value={`${patient.firstName} ${patient.lastName}`} 
+                  disabled 
+                  className="h-8 bg-gray-100 text-gray-600 text-sm font-medium"
+                />
               </div>
+              
+              <div>
+                <Label className="text-xs font-medium text-gray-700">Date of Birth</Label>
+                <Input 
+                  value={patient.dob ? format(new Date(patient.dob), 'MM/dd/yyyy') : 'N/A'} 
+                  disabled 
+                  className="h-8 bg-gray-100 text-gray-600 text-sm"
+                />
+              </div>
+              
+              <div>
+                <Label className="text-xs font-medium text-gray-700">MRN</Label>
+                <Input 
+                  value={patient.mrn} 
+                  disabled 
+                  className="h-8 bg-gray-100 text-gray-600 text-sm font-mono"
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="assessmentType" className="text-xs font-medium text-gray-700">
+                  Assessment Type *
+                </Label>
+                <Select value={assessmentType} onValueChange={(value: 'Initial' | 'Follow-up') => setAssessmentType(value)}>
+                  <SelectTrigger className="h-8 text-sm">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Initial">Initial Assessment</SelectItem>
+                    <SelectItem value="Follow-up">Follow-up Assessment</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          {/* Clinical Documentation */}
+          <div className="bg-green-50 p-4 rounded-lg">
+            <h3 className="font-semibold text-gray-800 mb-3 flex items-center">
+              <div className="w-2 h-4 bg-green-600 rounded-full mr-2"></div>
+              Clinical Documentation
+            </h3>
+            
+            <div className="space-y-3">
+              <div>
+                <Label htmlFor="summary" className="text-xs font-medium text-gray-700">
+                  Clinical Summary *
+                </Label>
+                <Textarea
+                  id="summary"
+                  rows={4}
+                  value={summary}
+                  onChange={(e) => setSummary(e.target.value)}
+                  placeholder="Provide clinical summary including patient presentation, mental status, and observations..."
+                  required
+                  className="text-sm resize-none"
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="recommendations" className="text-xs font-medium text-gray-700">
+                  Clinical Recommendations *
+                </Label>
+                <Textarea
+                  id="recommendations"
+                  rows={4}
+                  value={recommendations}
+                  onChange={(e) => setRecommendations(e.target.value)}
+                  placeholder="Document specific recommendations including medications, therapy, follow-up care..."
+                  required
+                  className="text-sm resize-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Signature */}
+          <div className="bg-gray-50 p-4 rounded-lg">
+            <h3 className="font-semibold text-gray-800 mb-3 flex items-center">
+              <div className="w-2 h-4 bg-indigo-600 rounded-full mr-2"></div>
+              Digital Signature
+            </h3>
+            <div className="text-xs text-gray-500 mb-2">
+              Electronic signature will be applied upon submission
+            </div>
+            <div className="text-xs text-gray-500">
+              By submitting, I confirm the information is accurate and complete.
+            </div>
+          </div>
+        </form>
+      </div>
+      
+      {/* Action Buttons */}
+      <div className="border-t border-gray-200 p-4 bg-white">
+        <div className="flex justify-end space-x-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCancel}
+            disabled={loading}
+            className="px-4 py-2 h-8 text-sm"
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            onClick={handleSubmit}
+            disabled={loading}
+            className="px-4 py-2 h-8 bg-purple-600 hover:bg-purple-700 text-white text-sm"
+          >
+            {loading ? (
+              <>
+                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
+                Submitting...
+              </>
+            ) : (
+              'Submit Notes'
             )}
-            
-            {/* Header Information Section */}
-            <div className="bg-gray-50 border-b border-gray-200 px-8 py-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-                <div className="w-2 h-6 bg-purple-600 rounded-full mr-3"></div>
-                Consultation Information
-              </h3>
-              
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label htmlFor="companyName" className="text-sm font-medium text-gray-700">
-                    Company/Organization Name *
-                  </Label>
-                  <Input
-                    id="companyName"
-                    type="text"
-                    value={companyName}
-                    onChange={(e) => setCompanyName(e.target.value)}
-                    placeholder="Enter your company/organization name"
-                    required
-                    className="h-11 border-gray-300 focus:border-purple-500 focus:ring-purple-500"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="consultDate" className="text-sm font-medium text-gray-700">
-                    Consultation Date *
-                  </Label>
-                  <Input
-                    id="consultDate"
-                    type="date"
-                    value={consultDate}
-                    onChange={(e) => setConsultDate(e.target.value)}
-                    required
-                    className="h-11 border-gray-300 focus:border-purple-500 focus:ring-purple-500"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-700">Consultant</Label>
-                  <Input 
-                    value={user?.name || ''} 
-                    disabled 
-                    className="h-11 bg-gray-100 border-gray-300 text-gray-600"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-700">Phone Number</Label>
-                  <Input 
-                    value={(user as any)?.phone_number || 'Not provided'} 
-                    disabled 
-                    className="h-11 bg-gray-100 border-gray-300 text-gray-600"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-700">Clinic Name</Label>
-                  <Input 
-                    value={selectedClinic?.name || 'No clinic selected'} 
-                    disabled 
-                    className="h-11 bg-gray-100 border-gray-300 text-gray-600"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="minutesSpent" className="text-sm font-medium text-gray-700">
-                    Minutes Spent *
-                  </Label>
-                  <Input
-                    id="minutesSpent"
-                    type="number"
-                    min="1"
-                    value={minutesSpent}
-                    onChange={(e) => setMinutesSpent(e.target.value)}
-                    required
-                    className="h-11 border-gray-300 focus:border-purple-500 focus:ring-purple-500"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Patient Information Section */}
-            <div className="bg-blue-50 border-b border-blue-200 px-8 py-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-                <div className="w-2 h-6 bg-blue-600 rounded-full mr-3"></div>
-                Patient Information
-              </h3>
-              
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-700">Patient Name</Label>
-                  <Input 
-                    value={`${patient.firstName} ${patient.lastName}`} 
-                    disabled 
-                    className="h-11 bg-gray-100 border-gray-300 text-gray-600 font-medium"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-700">Date of Birth</Label>
-                  <Input 
-                    value={patient.dob ? format(new Date(patient.dob), 'MM/dd/yyyy') : 'N/A'} 
-                    disabled 
-                    className="h-11 bg-gray-100 border-gray-300 text-gray-600"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-700">Medical Record Number</Label>
-                  <Input 
-                    value={patient.mrn} 
-                    disabled 
-                    className="h-11 bg-gray-100 border-gray-300 text-gray-600 font-mono"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="assessmentType" className="text-sm font-medium text-gray-700">
-                    Referred from Assessment Type *
-                  </Label>
-                  <Select value={assessmentType} onValueChange={(value: 'Initial' | 'Follow-up') => setAssessmentType(value)}>
-                    <SelectTrigger className="h-11 w-full border-gray-300 bg-white hover:border-gray-400 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 focus:ring-opacity-50 transition-all duration-200 shadow-sm">
-                      <SelectValue placeholder="Select assessment type" className="text-gray-700" />
-                    </SelectTrigger>
-                    <SelectContent className="border-gray-200 shadow-lg">
-                      <SelectItem value="Initial" className="hover:bg-purple-50 focus:bg-purple-50 cursor-pointer py-3">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                          <span className="font-medium">Initial Assessment</span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="Follow-up" className="hover:bg-purple-50 focus:bg-purple-50 cursor-pointer py-3">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                          <span className="font-medium">Follow-up Assessment</span>
-                        </div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-
-            {/* Clinical Content Section */}
-            <div className="px-8 py-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-6 flex items-center">
-                <div className="w-2 h-6 bg-green-600 rounded-full mr-3"></div>
-                Clinical Documentation
-              </h3>
-              
-              <div className="space-y-6">
-                <div className="space-y-3">
-                  <Label htmlFor="summary" className="text-sm font-medium text-gray-700">
-                    Clinical Summary *
-                  </Label>
-                  <Textarea
-                    id="summary"
-                    rows={6}
-                    value={summary}
-                    onChange={(e) => setSummary(e.target.value)}
-                    placeholder="Provide a comprehensive clinical summary of the consultation, including patient presentation, mental status examination findings, diagnostic impressions, and clinical observations..."
-                    required
-                    className="min-h-[150px] border-gray-300 focus:border-green-500 focus:ring-green-500 resize-none"
-                  />
-                  <div className="text-xs text-gray-500">
-                    Include patient presentation, symptoms, mental status, and clinical observations
-                  </div>
-                </div>
-                
-                <div className="space-y-3">
-                  <Label htmlFor="recommendations" className="text-sm font-medium text-gray-700">
-                    Clinical Recommendations *
-                  </Label>
-                  <Textarea
-                    id="recommendations"
-                    rows={6}
-                    value={recommendations}
-                    onChange={(e) => setRecommendations(e.target.value)}
-                    placeholder="Document specific clinical recommendations including medication adjustments, therapy recommendations, follow-up care, safety planning, and coordination with other providers..."
-                    required
-                    className="min-h-[150px] border-gray-300 focus:border-green-500 focus:ring-green-500 resize-none"
-                  />
-                  <div className="text-xs text-gray-500">
-                    Include medication recommendations, therapy suggestions, and follow-up plans
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Signature Section */}
-            <div className="bg-gray-50 border-t border-gray-200 px-8 py-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-                <div className="w-2 h-6 bg-indigo-600 rounded-full mr-3"></div>
-                Consultant Signature
-              </h3>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-700">Consultant Name</Label>
-                  <Input 
-                    value={user?.name || ''} 
-                    disabled 
-                    className="h-11 bg-gray-100 border-gray-300 text-gray-600 font-medium"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-700">Digital Signature</Label>
-                  <div className="h-11 border-2 border-dashed border-gray-300 rounded-md flex items-center justify-center text-sm text-gray-500 bg-gray-50">
-                    Electronic signature will be applied upon submission
-                  </div>
-                </div>
-              </div>
-              <div className="mt-4 text-xs text-gray-500">
-                By submitting this form, I confirm that the information provided is accurate and complete to the best of my knowledge.
-              </div>
-            </div>
-            
-            {/* Action Buttons */}
-            <div className="px-8 py-6 bg-white border-t border-gray-200">
-              <div className="flex justify-end space-x-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={onCancel}
-                  disabled={loading}
-                  className="px-6 py-2 h-11 border-gray-300 text-gray-700 hover:bg-gray-50"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={loading}
-                  className="px-8 py-2 h-11 bg-blue-700 hover:bg-blue-800 text-white font-medium shadow-lg"
-                >
-                  {loading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Submitting...
-                    </>
-                  ) : (
-                    'Submit Consultation Notes'
-                  )}
-                </Button>
-              </div>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+          </Button>
+        </div>
+      </div>
     </div>
   );
 };

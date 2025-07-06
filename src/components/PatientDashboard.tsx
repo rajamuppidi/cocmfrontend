@@ -18,6 +18,8 @@ import ScoreChart from "./scorechart";
 import { UserContext } from "@/context/UserContext";
 import PatientReminders from "./PatientReminders";
 import { FaFolder, FaFileAlt } from "react-icons/fa";
+import { Eye, X, Download, FileText, FilePlus, FileIcon } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Table,
   TableBody,
@@ -126,6 +128,29 @@ interface SafetyPlanHistoryEntry {
   notes?: string;
 }
 
+interface DocumentFile {
+  name: string;
+  type: "Assessment" | "Contact_Attempt" | "Intake_Form";
+  // For combined assessments
+  assessments?: {
+    [key: string]: {
+      type: string;
+      total_score: number;
+      answers: number[];
+    };
+  };
+  // For individual assessments (legacy)
+  score?: number;
+  answers?: number[];
+  notes?: string;
+  attemptDate?: string;
+  contactDate?: string;
+  contact_type?: string;
+  created_by?: string;
+  session_type?: string;
+  duration_minutes?: number;
+}
+
 export default function PatientDashboard({ params }: PatientDashboardProps) {
   const { patientId } = params;
   const user = useContext(UserContext); // Get logged-in user from context
@@ -139,7 +164,11 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
   const [showDocuments, setShowDocuments] = useState(false);
   const [showIntakeForm, setShowIntakeForm] = useState(false);
   const [showPsychConsultForm, setShowPsychConsultForm] = useState(false);
+  const [psychConsultMinimized, setPsychConsultMinimized] = useState(false);
   const [psychConsultRefresh, setPsychConsultRefresh] = useState(0);
+  const [psychConsultPosition, setPsychConsultPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [generatingMasterDocument, setGeneratingMasterDocument] = useState(false);
   const [showIntakeFormWarning, setShowIntakeFormWarning] = useState(false);
   const [expandedPHQ9, setExpandedPHQ9] = useState(false);
@@ -172,6 +201,18 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
   const [safetyPlanHistory, setSafetyPlanHistory] = useState<SafetyPlanHistoryEntry[]>([]);
   const [safetyPlanCompleting, setSafetyPlanCompleting] = useState(false);
   const [safetyPlanConfirmed, setSafetyPlanConfirmed] = useState(false);
+
+  // Add new state variables for patient deactivation
+  const [showDeactivateDialog, setShowDeactivateDialog] = useState(false);
+  const [deactivationReason, setDeactivationReason] = useState('');
+  const [deactivationConfirmed, setDeactivationConfirmed] = useState(false);
+  const [deactivating, setDeactivating] = useState(false);
+
+  // Add new state variables for document viewing from treatment history
+  const [showDocumentDialog, setShowDocumentDialog] = useState(false);
+  const [selectedDocument, setSelectedDocument] = useState<DocumentFile | null>(null);
+  const [documentError, setDocumentError] = useState<string | null>(null);
+  const [loadingDocument, setLoadingDocument] = useState(false);
 
   const fetchTreatmentHistory = async () => {
     if (!patientData) return;
@@ -440,11 +481,107 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
 
   const handlePsychConsultSuccess = () => {
     setShowPsychConsultForm(false);
+    setPsychConsultMinimized(false);
     setPsychConsultRefresh(prev => prev + 1);
     fetchPatientData(patientId);
     fetchPatientFlags(patientId); // Explicitly refresh flags to remove "Psychiatric Consult" flag
     fetchTreatmentHistory();
   };
+
+  // Initialize position when opening the chat window
+  useEffect(() => {
+    if (showPsychConsultForm && psychConsultPosition.x === 0 && psychConsultPosition.y === 0) {
+      // Default position: top-right corner with some margin
+      setPsychConsultPosition({ 
+        x: window.innerWidth - (psychConsultMinimized ? 340 : 820), 
+        y: 20 
+      });
+    }
+  }, [showPsychConsultForm, psychConsultMinimized, psychConsultPosition]);
+
+  // Handle dragging functionality
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    const rect = e.currentTarget.getBoundingClientRect();
+    setDragOffset({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top
+    });
+  };
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!isDragging) return;
+    
+    const newX = e.clientX - dragOffset.x;
+    const newY = e.clientY - dragOffset.y;
+    
+    // Boundary checking to keep window on screen
+    const windowWidth = psychConsultMinimized ? 320 : 800;
+    const windowHeight = psychConsultMinimized ? 56 : 600;
+    
+    const maxX = window.innerWidth - windowWidth;
+    const maxY = window.innerHeight - windowHeight;
+    
+    setPsychConsultPosition({
+      x: Math.max(0, Math.min(newX, maxX)),
+      y: Math.max(0, Math.min(newY, maxY))
+    });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  // Add event listeners for mouse move and mouse up
+  useEffect(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+    
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, dragOffset]);
+
+  // Adjust position when window is minimized/maximized to keep it on screen
+  useEffect(() => {
+    if (psychConsultPosition.x !== 0 || psychConsultPosition.y !== 0) {
+      const windowWidth = psychConsultMinimized ? 320 : 800;
+      const windowHeight = psychConsultMinimized ? 56 : 600;
+      
+      const maxX = window.innerWidth - windowWidth;
+      const maxY = window.innerHeight - windowHeight;
+      
+      setPsychConsultPosition(prev => ({
+        x: Math.max(0, Math.min(prev.x, maxX)),
+        y: Math.max(0, Math.min(prev.y, maxY))
+      }));
+    }
+  }, [psychConsultMinimized]);
+
+  // Handle window resize to keep chat window on screen
+  useEffect(() => {
+    const handleResize = () => {
+      if (psychConsultPosition.x !== 0 || psychConsultPosition.y !== 0) {
+        const windowWidth = psychConsultMinimized ? 320 : 800;
+        const windowHeight = psychConsultMinimized ? 56 : 600;
+        
+        const maxX = window.innerWidth - windowWidth;
+        const maxY = window.innerHeight - windowHeight;
+        
+        setPsychConsultPosition(prev => ({
+          x: Math.max(0, Math.min(prev.x, maxX)),
+          y: Math.max(0, Math.min(prev.y, maxY))
+        }));
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [psychConsultPosition, psychConsultMinimized]);
 
   // Add new functions for safety plan management
   const fetchSafetyPlanHistory = async () => {
@@ -501,6 +638,191 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
     } finally {
       setSafetyPlanCompleting(false);
     }
+  };
+
+  // Add function to handle patient deactivation
+  const handleDeactivatePatient = async () => {
+    if (!patientData || !deactivationReason.trim()) return;
+    
+    setDeactivating(true);
+    
+    try {
+      const response = await fetch(`http://localhost:4353/api/patients/${patientData.patientId}/deactivate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          reason: deactivationReason
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to deactivate patient: ${await response.text()}`);
+      }
+      
+      // Update local state to reflect the change
+      if (patientData) {
+        const updatedPatientData = { ...patientData, status: 'D' };
+        setPatientData(updatedPatientData);
+      }
+      
+      // Close dialog and reset form
+      setShowDeactivateDialog(false);
+      setDeactivationReason('');
+      setDeactivationConfirmed(false);
+      
+      // Show success message
+      alert('Patient has been marked as inactive successfully.');
+      
+    } catch (error) {
+      console.error('Error deactivating patient:', error);
+      alert(`Failed to deactivate patient: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setDeactivating(false);
+    }
+  };
+
+  // Add functions for document viewing from treatment history
+  const handleViewDocument = async (assessmentDate: string, assessmentType: string) => {
+    setLoadingDocument(true);
+    setDocumentError(null);
+    
+    try {
+      let endpoint = "";
+      let documentType: "Assessment" | "Contact_Attempt" | "Intake_Form";
+      
+      if (assessmentType === "Contact Attempt") {
+        documentType = "Contact_Attempt";
+        endpoint = `http://localhost:4353/api/patients/${patientData?.patientId}/contact-attempts/${assessmentDate}`;
+      } else if (assessmentType === "Intake Form") {
+        documentType = "Intake_Form";
+        endpoint = `http://localhost:4353/api/patients/${patientData?.patientId}/intake/${assessmentDate}`;
+      } else {
+        // For assessments (Initial or Follow-up), fetch both PHQ-9 and GAD-7
+        documentType = "Assessment";
+        endpoint = `http://localhost:4353/api/patients/${patientData?.patientId}/assessments/${assessmentDate}`;
+      }
+      
+      const response = await fetch(endpoint);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch document: ${await response.text()}`);
+      }
+      
+      const documentData = await response.json();
+      
+      // Create document object
+      const document: DocumentFile = {
+        name: `${documentType === "Assessment" ? "Assessment" : documentType} - ${assessmentDate}`,
+        type: documentType,
+        contactDate: assessmentDate
+      };
+      
+      if (documentType === "Assessment") {
+        // For assessments, include both PHQ-9 and GAD-7 data
+        document.assessments = documentData.assessments;
+        document.contact_type = documentData.contact_type;
+        document.created_by = documentData.created_by;
+        document.session_type = documentData.session_type;
+        document.duration_minutes = documentData.duration_minutes;
+      } else {
+        // For other document types
+        document.notes = documentData.notes || documentData.description;
+        document.attemptDate = documentType === "Contact_Attempt" ? assessmentDate : undefined;
+      }
+      
+      setSelectedDocument(document);
+      setShowDocumentDialog(true);
+      
+    } catch (error) {
+      console.error('Error fetching document:', error);
+      setDocumentError(`Failed to load document: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoadingDocument(false);
+    }
+  };
+
+  const handleExportDocument = async (assessmentDate: string, assessmentType: string) => {
+    try {
+      // Determine document type and endpoint
+      let endpoint = "";
+      let documentType = "";
+      
+      if (assessmentType === "Contact Attempt") {
+        endpoint = `http://localhost:4353/api/patients/${patientData?.patientId}/contact-attempts/${assessmentDate}/export`;
+        documentType = "Contact_Attempt";
+      } else if (assessmentType === "Intake Form") {
+        endpoint = `http://localhost:4353/api/patients/${patientData?.patientId}/intake/${assessmentDate}/export`;
+        documentType = "Intake_Form";
+      } else {
+        // For assessments, use the combined export endpoint that includes both PHQ-9 and GAD-7
+        endpoint = `http://localhost:4353/api/patients/${patientData?.patientId}/assessments/${assessmentDate}/export`;
+        documentType = "Assessment";
+      }
+      
+      const response = await fetch(endpoint, {
+        method: "GET",
+        credentials: "include",
+        headers: { "Accept": "application/pdf" },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to export PDF: ${await response.text()}`);
+      }
+      
+      const filename = response.headers.get("Content-Disposition")?.match(/filename="(.+)"/)?.[1] || `${documentType === "Assessment" ? "Combined_Assessment" : documentType}_${assessmentDate}.pdf`;
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+    } catch (error) {
+      console.error('Error exporting document:', error);
+      alert(`Failed to export document: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  // Get file icon based on file type
+  const getFileIcon = (fileType: string) => {
+    switch(fileType) {
+      case "Assessment":
+        return <FileText className="w-5 h-5 text-blue-500" />;
+      case "Contact_Attempt":
+        return <FilePlus className="w-5 h-5 text-green-500" />;
+      case "Intake_Form":
+        return <FileIcon className="w-5 h-5 text-purple-500" />;
+      default:
+        return <FileText className="w-5 h-5 text-gray-500" />;
+    }
+  };
+
+  // Questions for assessment viewer
+  const assessmentQuestions = {
+    "PHQ-9": [
+      "Little interest or pleasure in doing things",
+      "Feeling down, depressed, or hopeless",
+      "Trouble falling or staying asleep, or sleeping too much",
+      "Feeling tired or having little energy",
+      "Poor appetite or overeating",
+      "Feeling bad about yourself",
+      "Trouble concentrating on things",
+      "Moving or speaking so slowly",
+      "Thoughts that you would be better off dead",
+    ],
+    "GAD-7": [
+      "Feeling nervous, anxious, or on edge",
+      "Not being able to stop or control worrying",
+      "Worrying too much about different things",
+      "Trouble relaxing",
+      "Being so restless that it is hard to sit still",
+      "Becoming easily annoyed or irritable",
+      "Feeling afraid as if something awful might happen",
+    ]
   };
 
   useEffect(() => {
@@ -631,7 +953,7 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
       <div className="bg-blue-600 text-white p-4 relative">
         <h1 className="text-2xl font-bold">Clinical Dashboard</h1>
         <p className="text-sm">
-          {patientData.lastName}, {patientData.firstName} | Status: {patientData.status}
+          {patientData.lastName}, {patientData.firstName} | Status: {patientData.status === 'D' ? 'Inactive' : patientData.status}
           <br />
           Patient ID: {patientData.patientId} | MRN: {patientData.mrn}
           <br />
@@ -646,6 +968,9 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
           )}
           {flags.includes("Safety Plan") && (
             <div className="bg-red-600 text-white px-4 py-2 rounded-lg font-semibold">Safety Plan</div>
+          )}
+          {patientData.status === 'D' && (
+            <div className="bg-gray-800 text-white px-4 py-2 rounded-lg font-semibold">Inactive</div>
           )}
         </div>
       </div>
@@ -697,8 +1022,14 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
                 
                 {user?.role === "BHCM" && (
                   <Button 
-                    className="w-full bg-red-500 hover:bg-red-600 text-white"
+                    className={`w-full ${
+                      patientData.status === 'D' 
+                        ? "bg-gray-400 text-gray-600 cursor-not-allowed" 
+                        : "bg-red-500 hover:bg-red-600 text-white"
+                    }`}
                     onClick={() => setShowSafetyPlanDialog(true)}
+                    disabled={patientData.status === 'D'}
+                    title={patientData.status === 'D' ? "Cannot complete safety plans for inactive patients" : ""}
                   >
                     Complete Safety Plan
                   </Button>
@@ -877,14 +1208,26 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
             )}
             <Button
               onClick={() => setShowContactAttempt(true)}
-              className="bg-yellow-500 hover:bg-yellow-600 text-white"
+              className={`${
+                patientData.status === 'D' 
+                  ? "bg-gray-400 text-gray-600 cursor-not-allowed" 
+                  : "bg-yellow-500 hover:bg-yellow-600 text-white"
+              }`}
+              disabled={patientData.status === 'D'}
+              title={patientData.status === 'D' ? "Cannot record contact attempts for inactive patients" : ""}
             >
               Record Contact Attempt
             </Button>
             {user?.role === "Psychiatric Consultant" && (
               <Button
                 onClick={() => setShowPsychConsultForm(true)}
-                className="bg-purple-500 hover:bg-purple-600 text-white"
+                className={`${
+                  patientData.status === 'D' 
+                    ? "bg-gray-400 text-gray-600 cursor-not-allowed" 
+                    : "bg-purple-500 hover:bg-purple-600 text-white"
+                }`}
+                disabled={patientData.status === 'D'}
+                title={patientData.status === 'D' ? "Cannot document psychiatric consultations for inactive patients" : ""}
               >
                 Document Psychiatric Consultation
               </Button>
@@ -909,6 +1252,15 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
                 "Treatment History Master Record"
               )}
             </Button>
+            {/* Add Deactivate Patient Button - only show for active patients and admin/BHCM users */}
+            {(user?.role === "Admin" || user?.role === "BHCM") && patientData.status !== 'D' && (
+              <Button
+                onClick={() => setShowDeactivateDialog(true)}
+                className="bg-red-500 hover:bg-red-600 text-white ml-auto"
+              >
+                Mark as Inactive
+              </Button>
+            )}
           </div>
 
           {/* Add workflow progress indicator for enrolled patients */}
@@ -1116,6 +1468,11 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
           {/* Treatment History */}
           <div className="bg-white rounded-lg shadow-md p-6 mb-6">
             <h2 className="text-xl font-semibold mb-4">Treatment History</h2>
+            {documentError && (
+              <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-lg text-sm">
+                {documentError}
+              </div>
+            )}
             {treatmentHistory.length > 0 ? (
               <table className="w-full">
                 <thead>
@@ -1129,6 +1486,7 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
                     <th className="p-2 text-left">Psych Consultation</th>
                     <th className="p-2 text-left">Mode</th>
                     <th className="p-2 text-left">Duration (min)</th>
+                    <th className="p-2 text-left">Document</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1143,6 +1501,39 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
                       <td className="p-2">{entry.psych_consultation_recommended}</td>
                       <td className="p-2">{entry.interaction_mode}</td>
                       <td className="p-2">{entry.duration_minutes}</td>
+                      <td className="p-2">
+                        <div className="flex space-x-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              // Map assessment types to the correct format
+                              const mappedType = entry.assessment_type.includes("Initial") || entry.assessment_type.includes("Follow-up") 
+                                ? "Assessment" 
+                                : entry.assessment_type;
+                              handleViewDocument(entry.assessment_date, mappedType);
+                            }}
+                            className="p-1 h-8 w-8"
+                            disabled={loadingDocument}
+                            title="View Document"
+                          >
+                            {loadingDocument ? (
+                              <div className="w-3 h-3 border border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>
+                            ) : (
+                              <Eye className="w-3 h-3" />
+                            )}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleExportDocument(entry.assessment_date, entry.assessment_type)}
+                            className="p-1 h-8 w-8"
+                            title="Export PDF"
+                          >
+                            <Download className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -1428,19 +1819,336 @@ export default function PatientDashboard({ params }: PatientDashboardProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Psychiatric Consultation Dialog */}
-      <Dialog open={showPsychConsultForm} onOpenChange={setShowPsychConsultForm}>
-        <DialogContent className="max-w-5xl w-full max-h-[90vh] overflow-y-auto bg-white">
+      {/* Psychiatric Consultation Chat Window */}
+      {showPsychConsultForm && (
+        <div 
+          className={`fixed z-[9999] ${isDragging ? '' : 'transition-all duration-300 ease-in-out'}`}
+          style={{
+            left: `${psychConsultPosition.x}px`,
+            top: `${psychConsultPosition.y}px`,
+            cursor: isDragging ? 'grabbing' : 'default',
+            transform: isDragging ? 'scale(1.02)' : 'scale(1)',
+            boxShadow: isDragging ? '0 20px 40px rgba(0,0,0,0.3)' : '0 10px 25px rgba(0,0,0,0.2)'
+          }}
+        >
+          <div className={`bg-white rounded-lg shadow-2xl border border-gray-200 ${
+            psychConsultMinimized 
+              ? 'w-80 h-14' 
+              : 'w-[800px] h-[600px]'
+          } flex flex-col`}>
+            {/* Chat Header */}
+            <div 
+              className={`bg-purple-600 text-white p-4 rounded-t-lg flex justify-between items-center ${
+                isDragging ? 'cursor-grabbing' : 'cursor-grab'
+              } select-none`}
+              onMouseDown={handleMouseDown}
+            >
+              <div className="flex items-center space-x-2">
+                <div className="w-3 h-3 bg-white rounded-full"></div>
+                <h3 className="font-semibold">Psychiatric Consultation</h3>
+                {patientData && (
+                  <span className="text-sm opacity-90">
+                    - {patientData.firstName} {patientData.lastName}
+                  </span>
+                )}
+                <div className="flex items-center space-x-1 text-xs opacity-75">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16l-4-4m0 0l4-4m-4 4h18" />
+                  </svg>
+                  <span>Drag to move</span>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPsychConsultMinimized(!psychConsultMinimized);
+                  }}
+                  className="text-white hover:bg-purple-700 p-1 rounded transition-colors"
+                  title={psychConsultMinimized ? "Expand" : "Minimize"}
+                >
+                  {psychConsultMinimized ? (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 14l9-9M16 5l-9 9" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  )}
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowPsychConsultForm(false);
+                    setPsychConsultMinimized(false);
+                    setPsychConsultPosition({ x: 0, y: 0 });
+                  }}
+                  className="text-white hover:bg-purple-700 p-1 rounded transition-colors"
+                  title="Close"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            
+            {/* Chat Content */}
+            {!psychConsultMinimized && (
+              <div className="flex-1 overflow-hidden">
+                {patientData && (
+                  <div className="h-full">
+                    <PsychConsultForm
+                      patientId={patientData.patientId}
+                      onSuccess={handlePsychConsultSuccess}
+                                             onCancel={() => {
+                         setShowPsychConsultForm(false);
+                         setPsychConsultMinimized(false);
+                         setPsychConsultPosition({ x: 0, y: 0 });
+                       }}
+                      isMinimized={psychConsultMinimized}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Deactivation Dialog */}
+      <Dialog open={showDeactivateDialog} onOpenChange={(open) => {
+        setShowDeactivateDialog(open);
+        if (!open) {
+          // Reset form when dialog is closed
+          setDeactivationReason('');
+          setDeactivationConfirmed(false);
+        }
+      }}>
+        <DialogContent className="max-w-md w-full bg-white rounded-xl shadow-2xl p-6">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-bold">Psychiatric Consultation Notes</DialogTitle>
+            <DialogTitle className="text-xl font-semibold text-red-600">Mark Patient as Inactive</DialogTitle>
           </DialogHeader>
-          {patientData && (
-            <PsychConsultForm
-              patientId={patientData.patientId}
-              onSuccess={handlePsychConsultSuccess}
-              onCancel={() => setShowPsychConsultForm(false)}
-            />
+          <div className="space-y-4 mt-2">
+            <p className="text-gray-700 mb-2">
+              You are about to mark this patient as inactive. This action will remove the patient from active caseloads.
+            </p>
+            
+            <div className="space-y-2">
+              <Label htmlFor="reason" className="text-sm font-medium">
+                Reason for deactivation <span className="text-red-500">*</span>
+              </Label>
+              <Textarea
+                id="reason"
+                placeholder="Please provide a reason for deactivating this patient"
+                value={deactivationReason}
+                onChange={(e) => setDeactivationReason(e.target.value)}
+                className="min-h-[100px] w-full"
+                required
+              />
+            </div>
+            
+            <div className="flex items-center space-x-2 mt-4">
+              <Checkbox 
+                id="confirm" 
+                checked={deactivationConfirmed}
+                onCheckedChange={(checked) => setDeactivationConfirmed(checked === true)}
+              />
+              <Label htmlFor="confirm" className="text-sm font-medium">
+                I confirm that I want to mark this patient as inactive
+              </Label>
+            </div>
+            
+            <div className="flex justify-end space-x-2 mt-4">
+              <Button
+                variant="outline"
+                onClick={() => setShowDeactivateDialog(false)}
+                className="text-gray-700"
+                disabled={deactivating}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleDeactivatePatient}
+                className="bg-red-500 hover:bg-red-600 text-white"
+                disabled={deactivating || !deactivationConfirmed || !deactivationReason.trim()}
+              >
+                {deactivating ? "Processing..." : "Mark as Inactive"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Document Viewer Dialog */}
+      <Dialog open={showDocumentDialog} onOpenChange={(open) => {
+        setShowDocumentDialog(open);
+        if (!open) {
+          setSelectedDocument(null);
+          setDocumentError(null);
+        }
+      }}>
+        <DialogContent className="max-w-4xl w-full max-h-[85vh] bg-white rounded-xl shadow-2xl overflow-hidden">
+          <DialogHeader className="px-6 py-4 bg-gradient-to-b from-gray-50 to-gray-100 border-b border-gray-200 flex items-center justify-between">
+            <DialogTitle className="text-lg font-semibold text-gray-800 flex items-center">
+              {selectedDocument && getFileIcon(selectedDocument.type)}
+              <span className="ml-3">{selectedDocument?.name || "Document"}</span>
+            </DialogTitle>
+            <Button variant="ghost" size="icon" onClick={() => setShowDocumentDialog(false)}>
+              <X className="w-5 h-5 text-gray-600" />
+            </Button>
+          </DialogHeader>
+          
+          {selectedDocument && (
+            <ScrollArea className="p-6 max-h-[65vh]">
+              {/* Document content based on type */}
+              {selectedDocument.type === "Contact_Attempt" ? (
+                <div className="space-y-6">
+                  <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
+                    <h3 className="text-lg font-medium text-gray-800 mb-4">Contact Attempt Details</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-sm text-gray-500 font-medium">Attempt Date</p>
+                        <p className="text-base text-gray-900">{selectedDocument.attemptDate}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500 font-medium">Type</p>
+                        <p className="text-base text-gray-900">Contact Attempt</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
+                    <h3 className="text-lg font-medium text-gray-800 mb-4">Notes</h3>
+                    <p className="text-base text-gray-900 whitespace-pre-wrap">
+                      {selectedDocument.notes || "No notes provided"}
+                    </p>
+                  </div>
+                </div>
+              ) : selectedDocument.type === "Intake_Form" ? (
+                <div className="space-y-6">
+                  <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
+                    <h3 className="text-lg font-medium text-gray-800 mb-4">Patient Intake Form</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-sm text-gray-500 font-medium">Date</p>
+                        <p className="text-base text-gray-900">{selectedDocument.contactDate}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500 font-medium">Type</p>
+                        <p className="text-base text-gray-900">Patient Intake Form</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
+                    <h3 className="text-lg font-medium text-gray-800 mb-4">Form Information</h3>
+                    <p className="text-base text-gray-700">
+                      This is a comprehensive intake assessment form that includes patient symptoms, mental health history, 
+                      substance use history, medical history, family mental health history, and social situation details.
+                    </p>
+                    <p className="mt-2 text-base text-gray-700">
+                      Use the Export button below to download the complete intake form as a PDF.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
+                    <h3 className="text-lg font-medium text-gray-800 mb-4">Assessment Overview</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-sm text-gray-500 font-medium">Type</p>
+                        <p className="text-base text-gray-900">{selectedDocument.type}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500 font-medium">Date</p>
+                        <p className="text-base text-gray-900">{selectedDocument.contactDate}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500 font-medium">Contact Type</p>
+                        <p className="text-base text-gray-900">{selectedDocument.contact_type || "N/A"}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500 font-medium">Created By</p>
+                        <p className="text-base text-gray-900">{selectedDocument.created_by || "N/A"}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500 font-medium">Session Type</p>
+                        <p className="text-base text-gray-900">{selectedDocument.session_type || "N/A"}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500 font-medium">Duration</p>
+                        <p className="text-base text-gray-900">{selectedDocument.duration_minutes || 0} minutes</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Display both PHQ-9 and GAD-7 assessments */}
+                  {selectedDocument.assessments && Object.keys(selectedDocument.assessments).map((assessmentType) => {
+                    const assessment = selectedDocument.assessments![assessmentType];
+                    return (
+                      <div key={assessmentType} className="bg-gray-50 p-5 rounded-lg border border-gray-200">
+                        <h3 className="text-lg font-medium text-gray-800 mb-4">
+                          {assessmentType} Assessment (Score: {assessment.total_score})
+                        </h3>
+                        <div className="space-y-3">
+                          {assessment.answers?.map((answer, index) => {
+                            const options = ["Not at all", "Several days", "More than half the days", "Nearly every day"];
+                            const question = assessmentQuestions[assessmentType as keyof typeof assessmentQuestions]?.[index] || `Question ${index + 1}`;
+                            const selectedOption = options[answer] || "Not answered";
+                            
+                            return (
+                              <div key={index} className="p-3 bg-white rounded border border-gray-200">
+                                <p className="text-sm font-medium text-gray-800">{index + 1}. {question}</p>
+                                <p className="text-sm text-gray-600 mt-1">
+                                  Answer: <span className={`font-medium ${answer >= 2 ? 'text-amber-600' : 'text-blue-600'}`}>{selectedOption}</span>
+                                </p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </ScrollArea>
           )}
+          
+          <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-between">
+            <Button variant="outline" onClick={() => setShowDocumentDialog(false)}>
+              Close
+            </Button>
+            
+            {selectedDocument && (
+              <Button 
+                variant="default"
+                onClick={() => {
+                  if (selectedDocument.contactDate) {
+                    // Determine assessment type based on document type
+                    let assessmentType = "";
+                    switch (selectedDocument.type) {
+                      case "Contact_Attempt":
+                        assessmentType = "Contact Attempt";
+                        break;
+                      case "Intake_Form":
+                        assessmentType = "Intake Form";
+                        break;
+                      default:
+                        assessmentType = "Assessment";
+                    }
+                    handleExportDocument(selectedDocument.contactDate, assessmentType);
+                  }
+                }}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Export PDF
+              </Button>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

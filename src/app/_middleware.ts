@@ -5,7 +5,8 @@ import jwt from 'jsonwebtoken';
 const JWT_SECRET = process.env.JWT_SECRET || 'your_secret_key';
 
 export function middleware(req: NextRequest) {
-  const token = req.cookies.get('token') || '';
+  const tokenCookie = req.cookies.get('token');
+  const token = tokenCookie ? tokenCookie.value : '';
 
   console.log('Token:', token); // Debug statement
 
@@ -20,5 +21,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/admin/:path*', '/active-patients/:path*', '/other-protected-route/:path*'],
+  matcher: ['/dashboard/:path*', '/admin/:path*', '/active-patients/:path*', '/inactive-patients/:path*', '/inactive/:path*', '/other-protected-route/:path*'],
 };

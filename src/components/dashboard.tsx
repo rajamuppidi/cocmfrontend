@@ -10,6 +10,7 @@ import { RootState, AppDispatch } from '@/lib/store';
 import { UserContext } from '@/context/UserContext';
 import PatientEnrollment from '@/components/patient-enrollment';
 import RemindersSection from '@/components/RemindersSection';
+import { useRouter } from 'next/navigation';
 
 // Icon Components
 function ActivityIcon(props: React.JSX.IntrinsicAttributes & React.SVGProps<SVGSVGElement>) {
@@ -80,6 +81,7 @@ export const Dashboard: React.FC<DashboardProps> = () => {
   const [error, setError] = useState<string | null>(null);
   const [showEnrollmentForm, setShowEnrollmentForm] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const router = useRouter();
 
   useEffect(() => {
     if (selectedClinic?.id) {
@@ -198,18 +200,29 @@ export const Dashboard: React.FC<DashboardProps> = () => {
               <UsersIcon className="w-6 h-6 text-gray-500" />
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
-                <div className="text-2xl font-bold">+{clinicData?.newPatients || 0}</div>
-                <p className="text-xs text-gray-500">New patients this month</p>
+              <div className="text-lg font-bold">New Patients: {clinicData?.newPatients || 0}</div>
+              <div className="flex flex-col space-y-2">
+                <Button 
+                  className="bg-blue-500 hover:bg-blue-600 text-white"
+                  onClick={() => setShowEnrollmentForm(true)}
+                >
+                  Enroll New Patient
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="border-blue-500 text-blue-500 hover:bg-blue-50"
+                  onClick={() => router.push('/active-patients')}
+                >
+                  View Active Patients
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="border-gray-500 text-gray-500 hover:bg-gray-50"
+                  onClick={() => router.push('/inactive')}
+                >
+                  View Inactive Patients
+                </Button>
               </div>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => setShowEnrollmentForm(true)}
-                className="w-full"
-              >
-                Enroll New Patient
-              </Button>
             </CardContent>
           </Card>
 

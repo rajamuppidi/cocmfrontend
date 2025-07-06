@@ -8,7 +8,7 @@ import { RootState, AppDispatch } from '@/lib/store';
 import { UserContext } from '@/context/UserContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ChevronDown, Wrench, ExternalLink} from 'lucide-react';
+import { ChevronDown, Wrench, ExternalLink, Home, Map } from 'lucide-react';
 import { Menu, Transition } from '@headlessui/react';
 import { Fragment } from 'react';
 
@@ -36,12 +36,12 @@ const AuthenticatedLayout = ({ children }: AuthenticatedLayoutProps) => {
       router.push('/admin');
     } else if (user.role === 'Psychiatric Consultant') {
       const allowedPaths = ['/psych-dashboard', '/psych-patients', '/patients'];
-      if (!allowedPaths.some(path => pathname.startsWith(path))) {
+      if (pathname && !allowedPaths.some(path => pathname.startsWith(path))) {
         router.push('/psych-dashboard');
       }
     } else if (user.role !== 'Admin' && user.role !== 'Psychiatric Consultant') {
-      const allowedPaths = ['/dashboard', '/active-patients', '/enrolled-patients', '/patients'];
-      if (!allowedPaths.some(path => pathname.startsWith(path))) {
+      const allowedPaths = ['/dashboard', '/active-patients', '/enrolled-patients', '/inactive', '/patients'];
+      if (pathname && !allowedPaths.some(path => pathname.startsWith(path))) {
         router.push('/dashboard');
       }
     }
@@ -204,6 +204,7 @@ const AuthenticatedLayout = ({ children }: AuthenticatedLayoutProps) => {
                 className="text-white"
                 onClick={() => router.push('/dashboard')}
               >
+                <Home className="mr-2 h-5 w-5" />
                 Dashboard
               </Button>
               <Menu as="div" className="relative inline-block text-left">
@@ -245,6 +246,18 @@ const AuthenticatedLayout = ({ children }: AuthenticatedLayoutProps) => {
                             } block w-full px-4 py-2 text-left text-sm`}
                           >
                             Enrolled Patients
+                          </button>
+                        )}
+                      </Menu.Item>
+                      <Menu.Item>
+                        {({ active }) => (
+                          <button
+                            onClick={() => router.push(`/inactive`)}
+                            className={`${
+                              active ? 'bg-gray-100 text-gray-900' : 'text-gray-700'
+                            } block w-full px-4 py-2 text-left text-sm`}
+                          >
+                            Inactive Patients
                           </button>
                         )}
                       </Menu.Item>

@@ -1,14 +1,15 @@
 'use client'
+
 import { useSelector } from 'react-redux'
 import { RootState } from '@/lib/store'
-import ActivePatientsComponent from '@/components/ActivePatientsComponent'
+import InactivePatients from '@/components/InactivePatients'
 
-export default function ActivePatientsPage() {
+export default function InactivePage() {
   const selectedClinic = useSelector((state: RootState) => state.clinic.selectedClinic)
 
   return (
     <div className="w-full px-4 py-8">
-      <ActivePatientsComponent selectedClinic={selectedClinic} />
+      <InactivePatients selectedClinic={selectedClinic} />
     </div>
   )
-}
+} 
